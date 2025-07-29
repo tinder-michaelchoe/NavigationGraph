@@ -30,7 +30,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		80EB17C92E22189E004B5638 /* Exceptions for "NavigationGraph" folder in "NavigationGraph" target */ = {
+		80D728BB2E37FB7A00D5C29D /* Exceptions for "NavigationGraph" folder in "NavigationGraph" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
@@ -43,7 +43,7 @@
 		80EB179F2E22189C004B5638 /* NavigationGraph */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				80EB17C92E22189E004B5638 /* Exceptions for "NavigationGraph" folder in "NavigationGraph" target */,
+				80D728BB2E37FB7A00D5C29D /* Exceptions for "NavigationGraph" folder in "NavigationGraph" target */,
 			);
 			path = NavigationGraph;
 			sourceTree = "<group>";

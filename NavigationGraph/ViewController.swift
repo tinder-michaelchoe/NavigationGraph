@@ -11,9 +11,29 @@ class ViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        // Do any additional setup after loading the view.
+        
     }
-
-
 }
 
+/*
+struct NodeA: Node {
+    typealias Input = Void
+    typealias Output = String
+    
+    var id: String = "NodeA"
+}
+
+struct NodeB: Node {
+    typealias Input = String
+    typealias Output = Int
+    
+    var id: String = "NodeB"
+}
+
+struct NodeC: Node {
+    typealias Input = String
+    typealias Output = String
+    
+    var id: String = "NodeC"
+}
+*/
