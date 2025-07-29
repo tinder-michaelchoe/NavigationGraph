@@ -132,14 +132,14 @@ public final class NavigationController: NSObject {
         
         // UIViewController case, need to add SwiftUI View case
         guard
-            let viewControllerProviding = node.wrappedNode as? (any ViewControllerProviding),
-            let viewController = viewControllerProviding.viewControllerFactory?(data)
+            let anyViewControllerProviding = node.anyViewControllerProviding,
+            let viewController = anyViewControllerProviding.viewControllerFactory?(data)
         else {
             fatalError("Couldn't find view controller provider.")
         }
         
         viewControllerToNode[viewController] = node
-        viewController.onComplete = { [weak self, weak viewController] (output: Any) in
+        viewController.onComplete = { [weak self, weak viewController] output in
             guard let self, let viewController else { return }
             handleCompletion(from: viewController, output: output)
         }
@@ -160,7 +160,6 @@ public final class NavigationController: NSObject {
     /// this method simply returns, leaving the user on the current
     /// screen.
     private func handleCompletion(from view: UIViewController, output: Any) {
-        
         guard
             let node = viewControllerToNode[view],
             let currentEntry = nodeStack.last

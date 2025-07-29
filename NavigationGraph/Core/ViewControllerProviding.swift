@@ -1,0 +1,32 @@
+import UIKit
+
+protocol ViewControllerProviding {
+    associatedtype Input
+    
+    var viewControllerFactory: ((_ data: Input) -> NavigableViewController)? { get }
+}
+
+/// A type-erased wrapper for any `ViewControllerProviding`.
+public struct AnyViewControllerProviding: ViewControllerProviding {
+    public typealias Input = Any
+    
+    private let _viewControllerFactory: ((Any) -> NavigableViewController)?
+    
+    var viewControllerFactory: ((Any) -> NavigableViewController)? {
+        return _viewControllerFactory
+    }
+    
+    init<T: ViewControllerProviding>(_ base: T) {
+        if let factory = base.viewControllerFactory {
+            self._viewControllerFactory = { input in
+                // Attempt to cast and forward to the underlying factory
+                guard let typedInput = input as? T.Input else {
+                    fatalError("Type mismatch in AnyViewControllerProviding for input: \(type(of: input)) should be \(T.Input.self)")
+                }
+                return factory(typedInput)
+            }
+        } else {
+            self._viewControllerFactory = nil
+        }
+    }
+}

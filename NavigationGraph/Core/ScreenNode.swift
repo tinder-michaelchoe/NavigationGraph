@@ -20,22 +20,17 @@ public struct ScreenNode<Input, Output>: NavNode, ViewControllerProviding {
     public typealias OutputType = Output
     
     public let id: String
-    let viewControllerFactory: ((Any) -> UIViewController & NavigableViewController)?
+    let viewControllerFactory: ((Input) -> any NavigableViewController)?
     
     public init(
         _ id: String,
-        viewControllerFactory: ((Input) -> UIViewController & NavigableViewController)? = nil
+        viewControllerFactory: ((Input) -> any NavigableViewController)? = nil
     ) {
         self.id = id
-        self.viewControllerFactory = { input in
-            return (viewControllerFactory?((input as? InputType)!))!
-        }
+        self.viewControllerFactory = viewControllerFactory
     }
 }
 
-protocol ViewControllerProviding {
-    var viewControllerFactory: ((_ data: Any) -> UIViewController & NavigableViewController)? { get }
-}
 /*
 protocol ViewProviding {
     var viewFactory: ((_ data: Any?) -> (any View & NavigableViewController))? { get }

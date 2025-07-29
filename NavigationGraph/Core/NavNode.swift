@@ -88,3 +88,12 @@ public final class AnyNavNode {
         }
     }
 }
+
+extension AnyNavNode {
+    var anyViewControllerProviding: AnyViewControllerProviding? {
+        guard let viewControllerProviding = wrappedNode as? (any ViewControllerProviding) else {
+            fatalError("This node is not View Controller Providing")
+        }
+        return AnyViewControllerProviding(viewControllerProviding)
+    }
+}

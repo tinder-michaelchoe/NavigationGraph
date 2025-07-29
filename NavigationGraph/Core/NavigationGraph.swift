@@ -239,19 +239,6 @@ public final class NavSubgraph<Start: NavNode>: NavNode {
     }
 }
 
-/// A protocol that view controllers used by `NavigationController` must
-/// conform to.  It exposes an `onComplete` callback which should be
-/// invoked when the user has finished interacting with the screen.  The
-/// parameter to `onComplete` is the data returned from the screen; it
-/// must match the node's `OutputType`. `NavigationController` uses
-/// this callback to resume navigation.
-public protocol NavigableViewController: UIViewController {
-    /// Call this closure when the view controller's work is
-    /// complete.  Pass back any data produced by the screen.
-    var onComplete: ((Any) -> Void)? { get set }
-}
-
-
 /*
 // Provide a default async method for awaiting completion of a
 // navigable view controller.  This helper hides the use of
