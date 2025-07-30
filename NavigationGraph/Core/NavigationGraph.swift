@@ -1,24 +1,6 @@
 //
 //  NavigationGraph.swift
 //
-//  Created by AI assistant as part of a demonstration of a type‑safe
-//  navigation graph inspired by Android's Navigation component.  The goal
-//  of this library is to provide a simple, idiomatic and maintainable
-//  navigation graph for iOS/macOS projects written in Swift.  Nodes in
-//  the graph represent screens (view controllers, SwiftUI views or
-//  arbitrary presentation contexts), edges represent the legal
-//  transitions between them, and data is passed along those edges in a
-//  strongly‑typed manner.  Nested graphs are also supported via the
-//  `NavSubgraph` type, allowing you to group related flows into
-//  encapsulated subgraphs that can be reused throughout your app.
-//
-//  To use this library, create instances of `ScreenNode` for each of
-//  your screens (or conform your own types to the `NavNode` protocol),
-//  register them with a `NavigationGraph`, and then create `Edge`
-//  instances describing how one screen can navigate to another.  You
-//  can then query the graph for reachability, compute a path between
-//  nodes, or pretty‑print a sequence of edges for debugging or
-//  documentation purposes.
 
 import Foundation
 import UIKit

@@ -2,19 +2,21 @@ import UIKit
 
 protocol ViewControllerProviding {
     associatedtype Input
+    associatedtype ViewController: NavigableViewController
     
-    var viewControllerFactory: ((_ data: Input) -> any NavigableViewController)? { get }
+    var viewControllerFactory: ((_ data: Input) -> ViewController)? { get }
 }
 
 /// A type-erased wrapper for any `ViewControllerProviding`.
 public struct AnyViewControllerProviding: ViewControllerProviding {
     public typealias Input = Any
+    public typealias ViewController = AnyNavigableViewController
     
     private let _viewControllerFactory: ((Any) -> AnyNavigableViewController)?
     
-    var viewControllerFactory: ((Any) -> any NavigableViewController)? {
+    var viewControllerFactory: ((Any) -> AnyNavigableViewController)? {
         return { value in
-            return _viewControllerFactory?(value).wrapped as! any NavigableViewController
+            return _viewControllerFactory!(value)
         }
     }
     

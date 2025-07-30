@@ -13,7 +13,7 @@
 /// input or produce output, use `Void` for these associated types.
 /// Conforming types must provide a unique `id` that identifies them
 /// within the graph.
-public protocol NavNode {
+public protocol NavNode: AnyObject {
     /// The type of data required to instantiate or present this
     /// destination.  This is analogous to the `@Serializable` route
     /// classes used in Android's Navigation component.  Using an
@@ -98,14 +98,13 @@ extension AnyNavNode {
     }
 }
 
-/*
 extension AnyNavNode {
     /// Returns a fully qualified identifier describing this node's position within nested subgraphs.
     /// Format: [subgraphId1].[subgraphId2].<node id>
     public var fullyQualifiedId: String {
         func buildId(from node: AnyNavNode?) -> String {
             guard let subgraph = node?.subgraphWrapper else {
-                return node?.id ?? ""
+                return ""
             }
             // Recurse upward if the subgraph itself is wrapped in another subgraph node (linked by its graph's root node)
             // Assume the subgraph's graph contains a start node with its own AnyNavNode representation
@@ -117,5 +116,9 @@ extension AnyNavNode {
         return prefix.isEmpty ? id : prefix + "." + id
     }
 }
-*/
 
+extension NavNode {
+    var id: String {
+        "\(Self.self)"
+    }
+}

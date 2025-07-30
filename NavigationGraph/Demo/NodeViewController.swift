@@ -4,14 +4,14 @@ import UIKit
 /// invokes a completion callback when the user taps the "Next"
 /// button.  The background colour is passed in during
 /// initialization to visually distinguish each screen.
-final class NodeViewController: UIViewController {
+final public class NodeViewController: UIViewController {
     private let nodeId: String
     private let colour: UIColor
     /// A closure that the coordinator sets to be called when the
     /// user has finished interacting with this screen.  The
     /// parameter carries the data returned from the screen.  For
     /// simple screens with `Void` data, pass `()` to this closure.
-    var onComplete: ((Any) -> Void)?
+    public var onComplete: ((Any) -> Void)?
 
     /// Tracks whether the completion callback has already been
     /// invoked.  This prevents the continuation from being resumed
@@ -29,7 +29,7 @@ final class NodeViewController: UIViewController {
         fatalError("init(coder:) has not been implemented")
     }
 
-    override func viewDidLoad() {
+    override public func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = colour
         // Create a label showing the node identifier.
@@ -79,7 +79,7 @@ final class NodeViewController: UIViewController {
     /// navigating back and forth through the stack.  Without this
     /// reset, a screen that was previously completed would remain
     /// disabled on subsequent appearances.
-    override func viewDidAppear(_ animated: Bool) {
+    override public func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         // Always allow the screen to complete again after it
         // reappears.  Do not reset the flag during animations to
@@ -95,7 +95,7 @@ final class NodeViewController: UIViewController {
     /// completed here without invoking the completion callback.  The
     /// navigation controller's delegate will handle the pop and
     /// update its internal state accordingly.
-    override func viewWillDisappear(_ animated: Bool) {
+    override public func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         // Only trigger completion if the view is being removed from
         // its parent or dismissed.  If we're simply covering it with

@@ -44,6 +44,7 @@ public final class NavigationController: NSObject {
     /// represents the current screen.  When a view controller is
     /// popped, the corresponding entry is removed from this stack.
     private var nodeStack: [StackItem] = []
+    private var nodeRegistry = NodeRegistry()
     
     /// A mapping from view controllers to the nodes they represent.
     //private var viewControllerToNode: [UIViewController: AnyNavNode] = [:]
@@ -54,9 +55,11 @@ public final class NavigationController: NSObject {
     /// Creates a new navigation controller for the given graph and presenter.
     public init(
         graph: NavigationGraph,
+        nodeRegistry: NodeRegistry,
         navigationController: UINavigationController
     ) {
         self.graph = graph
+        self.nodeRegistry = nodeRegistry
         self.navigationController = navigationController
         super.init()
         // Assign self as the navigation controller's delegate to be
@@ -136,20 +139,12 @@ public final class NavigationController: NSObject {
         // UIViewController case, need to add SwiftUI View case
         guard
             let anyViewControllerProviding = node.anyViewControllerProviding,
-            let viewController = anyViewControllerProviding.viewControllerFactory?(data)
+            let viewController = anyViewControllerProviding.viewControllerFactory?(data).wrapped as? (any NavigableViewController)
         else {
             fatalError("Couldn't find view controller provider.")
         }
         
         let anyNavigableViewController = AnyNavigableViewController(viewController)
-        
-        /*
-        viewControllerToNode[viewController] = node
-        viewController.onComplete = { [weak self, weak viewController] output in
-            guard let self, let viewController else { return }
-            handleCompletion(from: viewController, output: output)
-        }
-         */
         
         anyViewControllerToNode[anyNavigableViewController.hash] = node
         anyNavigableViewController.onComplete = { [weak self, weak viewController] output in
@@ -206,7 +201,7 @@ public final class NavigationController: NSObject {
         let nextId = chosen.toNode.id
         let transitionType = chosen.transition
         print(
-            "NavigationController: will navigate from \(currentId) to \(nextId) via \(transitionType). Input data: \(output). Transformed data: \(nextData)"
+            "NavigationController: will navigate from \(node.fullyQualifiedId) to \(chosen.toNode.fullyQualifiedId) via \(transitionType). Input data: \(output). Transformed data: \(nextData)"
         )
         // Determine the destination node within the current graph.
         guard let dest = currentGraph.nodes[chosen.toNode.id] else {

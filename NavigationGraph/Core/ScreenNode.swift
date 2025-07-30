@@ -15,18 +15,21 @@ import UIKit
 /// completes.  For example, a profile screen that requires a
 /// `User` object and produces no output could be defined as
 /// `let profileNode = ScreenNode<User, Void>("profile")`.
-public struct ScreenNode<Input, Output>: NavNode, ViewControllerProviding {
+public final class ScreenNode<Input, Output>: NavNode, ViewControllerProviding {
     public typealias InputType = Input
     public typealias OutputType = Output
     
-    public let id: String
-    let viewControllerFactory: ((Input) -> any NavigableViewController)?
+    public var id: String {
+        return "\(Self.self).\(_id)"
+    }
+    private let _id: String
+    let viewControllerFactory: ((Input) -> NodeViewController)?
     
     public init(
         _ id: String,
-        viewControllerFactory: ((Input) -> any NavigableViewController)? = nil
+        viewControllerFactory: ((Input) -> NodeViewController)? = nil
     ) {
-        self.id = id
+        self._id = id
         self.viewControllerFactory = viewControllerFactory
     }
 }
