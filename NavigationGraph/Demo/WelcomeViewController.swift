@@ -16,7 +16,7 @@ class WelcomeViewController: UIViewController, NavigableViewController {
         case signIn
     }
     
-    var onComplete: ((Any) -> Void)?
+    var onComplete: ((WelcomeResult) -> Void)?
     
     private var cancellables = Set<AnyCancellable>()
     private lazy var hostedView = UIHostingController(rootView: WelcomeView(viewState: viewState))
@@ -37,7 +37,7 @@ class WelcomeViewController: UIViewController, NavigableViewController {
             .dropFirst()
             .sink { [weak self] _ in
                 guard let self else { return }
-                onComplete?(WelcomeResult.next)
+                onComplete?(.next)
             }
             .store(in: &cancellables)
         
@@ -45,7 +45,7 @@ class WelcomeViewController: UIViewController, NavigableViewController {
             .dropFirst()
             .sink { [weak self] _ in
                 guard let self else { return }
-                onComplete?(WelcomeResult.signIn)
+                onComplete?(.signIn)
             }
             .store(in: &cancellables)
 
@@ -103,7 +103,8 @@ struct WelcomeView: View {
                     .background(Color.secondary)
             )
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.mint)
         .ignoresSafeArea()
-        .background(Color.mint.frame(width: .greatestFiniteMagnitude, height: .greatestFiniteMagnitude))
     }
 }

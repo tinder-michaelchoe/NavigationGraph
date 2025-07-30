@@ -15,20 +15,21 @@ import UIKit
 /// this callback to resume navigation.
 public protocol NavigableViewController: UIViewController {
     
-    // associatedtype CompletionType
+    associatedtype CompletionType
     
     /// Call this closure when the view controller's work is
     /// complete.  Pass back any data produced by the screen.
-    var onComplete: ((Any) -> Void)? { get set }
+    var onComplete: ((CompletionType) -> Void)? { get set }
 }
 
-/*
 /// Type-erased wrapper for any NavigableViewController.
 /// Allows using onComplete in a type-erased manner with Any payload.
 open class AnyNavigableViewController: UIViewController, NavigableViewController {
     public typealias CompletionType = Any
     
     private let box: AnyNavigableViewControllerBox
+    
+    let wrapped: AnyObject
     
     /// Called when the view controller completes with any output.
     public var onComplete: ((Any) -> Void)? {
@@ -38,17 +39,23 @@ open class AnyNavigableViewController: UIViewController, NavigableViewController
     
     public init<VC: NavigableViewController>(_ base: VC) where VC: UIViewController {
         self.box = NavigableViewControllerBoxImpl(base)
+        self.wrapped = base
         super.init(nibName: nil, bundle: nil)
-        // Add the boxed VC as a child VC
-        addChild(base)
-        view.addSubview(base.view)
-        base.view.frame = view.bounds
-        base.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        base.didMove(toParent: self)
     }
     
     public required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+}
+
+extension AnyNavigableViewController {
+    
+    override open var hash: Int {
+        wrapped.hash
+    }
+    
+    static func ==(lhs: AnyNavigableViewController, rhs: AnyNavigableViewController) -> Bool {
+        return lhs.hashValue == rhs.hashValue
     }
 }
 
@@ -82,4 +89,3 @@ private final class NavigableViewControllerBoxImpl<VC: NavigableViewController>:
         self.base = base
     }
 }
-*/

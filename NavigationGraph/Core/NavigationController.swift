@@ -46,7 +46,10 @@ public final class NavigationController: NSObject {
     private var nodeStack: [StackItem] = []
     
     /// A mapping from view controllers to the nodes they represent.
-    private var viewControllerToNode: [UIViewController: AnyNavNode] = [:]
+    //private var viewControllerToNode: [UIViewController: AnyNavNode] = [:]
+    private var anyViewControllerToNode: [Int: AnyNavNode] = [:]
+    
+    private var allNodes: [String : AnyNavNode] = [:]
 
     /// Creates a new navigation controller for the given graph and presenter.
     public init(
@@ -138,8 +141,18 @@ public final class NavigationController: NSObject {
             fatalError("Couldn't find view controller provider.")
         }
         
+        let anyNavigableViewController = AnyNavigableViewController(viewController)
+        
+        /*
         viewControllerToNode[viewController] = node
         viewController.onComplete = { [weak self, weak viewController] output in
+            guard let self, let viewController else { return }
+            handleCompletion(from: viewController, output: output)
+        }
+         */
+        
+        anyViewControllerToNode[anyNavigableViewController.hash] = node
+        anyNavigableViewController.onComplete = { [weak self, weak viewController] output in
             guard let self, let viewController else { return }
             handleCompletion(from: viewController, output: output)
         }
@@ -161,7 +174,8 @@ public final class NavigationController: NSObject {
     /// screen.
     private func handleCompletion(from view: UIViewController, output: Any) {
         guard
-            let node = viewControllerToNode[view],
+            let navigableViewController = view as? any NavigableViewController,
+            let node = anyViewControllerToNode[AnyNavigableViewController(navigableViewController).hash],
             let currentEntry = nodeStack.last
         else {
             fatalError("Couldn't get last node.")
@@ -222,9 +236,11 @@ public final class NavigationController: NSObject {
     /// called from the navigation controller delegate and the
     /// presentation controller delegate.
     private func handlePop(for view: UIViewController) {
-
-        guard let poppedNode = viewControllerToNode[view] else { return }
-        viewControllerToNode[view] = nil
+        guard
+            let navigableViewController = view as? any NavigableViewController,
+            let poppedNode = anyViewControllerToNode[AnyNavigableViewController(navigableViewController).hash]
+        else { return }
+        anyViewControllerToNode[AnyNavigableViewController(navigableViewController).hash] = nil
         
         nodeStack.removeLast()
         // Log the pop.  Report the popped node and the new top of the stack if any.

@@ -65,6 +65,22 @@ public struct Edge<From: NavNode, To: NavNode> {
         self.predicate = predicate
         self.transform = transform
     }
+    
+    public init(
+        id: String? = nil,
+        from: From,
+        to: To,
+        transition: TransitionType,
+        predicate: ((From.OutputType) -> Bool)? = nil,
+        transform: @escaping (From.OutputType) -> To.InputType = { _ in return () }
+    ) where To.InputType == Void {
+        self.id = id ?? "\(from.id)->\(to.id)"
+        self.from = from
+        self.to = to
+        self.transition = transition
+        self.predicate = predicate
+        self.transform = transform
+    }
 }
 
 // MARK: - Type erasure wrappers

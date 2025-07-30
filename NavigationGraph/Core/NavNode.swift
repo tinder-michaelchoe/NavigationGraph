@@ -97,3 +97,25 @@ extension AnyNavNode {
         return AnyViewControllerProviding(viewControllerProviding)
     }
 }
+
+/*
+extension AnyNavNode {
+    /// Returns a fully qualified identifier describing this node's position within nested subgraphs.
+    /// Format: [subgraphId1].[subgraphId2].<node id>
+    public var fullyQualifiedId: String {
+        func buildId(from node: AnyNavNode?) -> String {
+            guard let subgraph = node?.subgraphWrapper else {
+                return node?.id ?? ""
+            }
+            // Recurse upward if the subgraph itself is wrapped in another subgraph node (linked by its graph's root node)
+            // Assume the subgraph's graph contains a start node with its own AnyNavNode representation
+            let rootNode = subgraph.graph.nodes[subgraph.startNodeId]
+            let parentId = buildId(from: rootNode)
+            return parentId.isEmpty ? subgraph.id : parentId + "." + subgraph.id
+        }
+        let prefix = buildId(from: self)
+        return prefix.isEmpty ? id : prefix + "." + id
+    }
+}
+*/
+

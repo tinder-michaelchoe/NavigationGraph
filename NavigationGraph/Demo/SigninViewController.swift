@@ -76,7 +76,8 @@ struct SigninView: View {
                 RoundedRectangle(cornerSize: .init(width: 6.0, height: 6.0))
             )
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.purple)
         .ignoresSafeArea()
-        .background(Color.mint.frame(width: .greatestFiniteMagnitude, height: .greatestFiniteMagnitude))
     }
 }

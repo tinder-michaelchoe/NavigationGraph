@@ -75,8 +75,7 @@ final class AppCoordinator {
             from: home,
             to: signInSubgraph,
             transition: .push,
-            predicate: { $0 == .signIn },
-            transform: { _ in return () }
+            predicate: { $0 == .signIn }
         ))
         
         // The profile screen returns a Bool indicating which branch
