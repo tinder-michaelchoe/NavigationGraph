@@ -9,29 +9,39 @@ import Combine
 import SwiftUI
 import UIKit
 
+final class ForgotPasswordNode: NavNode, ViewControllerProviding {
+
+    typealias InputType = String?
+    typealias OutputType = Void
+
+    let viewControllerFactory: ((String?) -> ForgotPasswordViewController)? = { possibleEmail in
+        return ForgotPasswordViewController(initialEmailAddress: possibleEmail)
+    }
+}
+
 class ForgotPasswordViewController: UIViewController, NavigableViewController {
-    
+
     var onComplete: ((Any) -> Void)?
-    
+
     private var cancellables = Set<AnyCancellable>()
     private lazy var hostedView = UIHostingController(rootView: ForgotPasswordView(viewState: viewState))
     private var initialEmailAddress: String?
     private let viewState: ForgotPasswordViewState
-    
+
     init(initialEmailAddress: String?) {
         self.initialEmailAddress = initialEmailAddress
         self.viewState = ForgotPasswordViewState()
         self.viewState.emailAddress = initialEmailAddress ?? ""
         super.init(nibName: nil, bundle: nil)
     }
-    
+
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
-    
+
     override func viewDidLoad() {
         super.viewDidLoad()
-        
+
         hostedView.rootView.viewState.$didPressNext
             .dropFirst()
             .sink { [weak self] _ in
@@ -41,10 +51,10 @@ class ForgotPasswordViewController: UIViewController, NavigableViewController {
             .store(in: &cancellables)
 
         view.addAutolayoutSubview(hostedView.view)
-        
+
         installConstraints()
     }
-    
+
     func installConstraints() {
         view.addConstraints([
             hostedView.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
@@ -61,19 +71,63 @@ class ForgotPasswordViewState: ObservableObject {
 }
 
 struct ForgotPasswordView: View {
-    
+
     @ObservedObject var viewState: ForgotPasswordViewState
-    
+
+    @State private var email: String = ""
+    @State private var showConfirmation: Bool = false
+
     var body: some View {
-        VStack(spacing: 48.0) {
+        VStack(spacing: 24) {
+            Spacer()
+
+            // Title
             Text("Forgot Password")
-                .font(.largeTitle)
+                .font(.title)
+                .fontWeight(.bold)
+                .foregroundColor(.primary)
+                .padding(.top)
+
+            // Description
+            Text("Enter the email address you used to create your account and we'll send you a password reset link.")
+                .font(.body)
+                .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
+                .padding(.horizontal)
+
+            // Email Input
             TextField("Email Address", text: $viewState.emailAddress)
-                //.placeholder(Text("Enter your email address"))
+                .keyboardType(.emailAddress)
+                .autocapitalization(.none)
+                .padding()
+                .background(Color(.secondarySystemBackground))
+                .cornerRadius(10)
+                .padding(.horizontal)
+
+            // Submit Button
+            Button(action: {
+                // Handle forgot password request
+                showConfirmation = true
+            }) {
+                Text("Send Reset Link")
+                    .fontWeight(.semibold)
+                    .foregroundColor(.white)
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(Color(red: 139/255, green: 0, blue: 0)) // Dark red
+                    .cornerRadius(12)
+                    .padding(.horizontal)
+            }
+
+            Spacer()
         }
-        .ignoresSafeArea()
-        .background(Color.mint.frame(width: .greatestFiniteMagnitude, height: .greatestFiniteMagnitude))
+        .alert(isPresented: $showConfirmation) {
+            Alert(
+                title: Text("Check Your Email"),
+                message: Text("We've sent a password reset link to \(email)."),
+                dismissButton: .default(Text("OK"))
+            )
+        }
     }
-    
+
 }

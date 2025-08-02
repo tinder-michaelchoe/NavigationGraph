@@ -384,4 +384,51 @@ public extension NavigationGraph {
         return []
     }
 }
+
+extension NavigationGraph {
+    /// Pretty-prints the graph starting from the given node, including subgraphs.
+    public func prettyPrintOutline(from rootId: String) -> String {
+        guard nodes[rootId] != nil else { return "Root node \(rootId) not found." }
+
+        var output: [String] = []
+        var visited: Set<String> = []
+
+        func dfs(_ nodeId: String, prefix: String, isLast: Bool) {
+            let marker = isLast ? "└─ " : "├─ "
+            output.append("\(prefix)\(marker)\(nodeId)")
+            visited.insert(nodeId)
+
+            // Check if node is a subgraph and include its internal graph
+            if let subgraphNode = nodes[nodeId]?.wrappedNode as? NavSubgraphProtocol {
+                let subPrefix = prefix + (isLast ? "   " : "│  ")
+                output.append("\(subPrefix)┌─ [Subgraph: \(subgraphNode.id)]")
+                let subgraphOutline = subgraphNode.graph.prettyPrintOutline(from: subgraphNode.startNodeId)
+                let indented = subgraphOutline
+                    .split(separator: "\n")
+                    .map { "\(subPrefix)│  \($0)" }
+                output.append(contentsOf: indented)
+                output.append("\(subPrefix)└──────────────")
+            }
+
+            // Traverse children from adjacency map
+            let children = adjacency[nodeId] ?? []
+            let nextPrefix = prefix + (isLast ? "   " : "│  ")
+
+            for (index, edge) in children.enumerated() {
+                let isChildLast = index == children.count - 1
+                let toId = edge.toNode.id
+
+                if !visited.contains(toId) {
+                    dfs(toId, prefix: nextPrefix, isLast: isChildLast)
+                } else {
+                    let loopMarker = isChildLast ? "└─ " : "├─ "
+                    output.append("\(nextPrefix)\(loopMarker)[loop] \(toId)")
+                }
+            }
+        }
+
+        dfs(rootId, prefix: "", isLast: true)
+        return output.joined(separator: "\n")
+    }
+}
 #endif

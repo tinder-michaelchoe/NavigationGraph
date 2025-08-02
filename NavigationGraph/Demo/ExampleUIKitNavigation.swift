@@ -8,43 +8,21 @@ struct User {
     let name: String = "Frank"
 }
 
-/// A coordinator that wires together the NavigationGraph, the
-/// type‑safe NavigationController and a UINavigationController.  It
-/// constructs the graph, defines the presenter closure that
-/// displays each screen, and starts the navigation flow from the
-/// designated start node.
 final class AppCoordinator {
-    /// The UIKit navigation controller that presents each screen.
+
     private let uiNavigationController: UINavigationController
-    /// The type‑safe graph describing the flow.
-    //private let graph: NavigationGraph
-    /// The type‑safe controller that orchestrates navigation.
     private let navController: NavigationController
-    /// A mapping from node identifiers to distinct colours for
-    /// demonstration purposes.
-    private let colours: [String: UIColor] = [
-        "home": .systemBlue,
-        "profile": .systemGreen,
-        "settings": .systemOrange,
-        "welcome": .systemPurple,
-        "register": .systemRed,
-        "directRegister": .systemTeal
-    ]
 
     init() {
         self.uiNavigationController = UINavigationController()
-        //self.graph = NavigationGraph()
         
         let graph = NavigationGraph()
         let nodeRegistry = NodeRegistry()
         
-        //let welcome = WelcomeNode()
-        //graph.addNode(welcome)
-        
         let welcome = WelcomeNode()
         graph.addNode(welcome)
         nodeRegistry.register(welcome)
-        
+
         // Sign In Subgraph
         let signinGraph = NavigationGraph()
         let signinHome = SignInHomeNode()
@@ -71,41 +49,56 @@ final class AppCoordinator {
             transition: .push,
             predicate: { $0 == .signIn }
         ))
-        
-        let profile = ScreenNode<User, Bool>("profile") { input in
-            return NodeViewController(nodeId: "profile", colour: .systemBlue)
-        }
-        let settings = ScreenNode<Void, Void>("settings") { _ in
-            return NodeViewController(nodeId: "Settings from Factory", colour: .systemGreen)
-        }
-        let register = ScreenNode<Void, Void>("register") { _ in
-            return NodeViewController(nodeId: "Register from Factory", colour: .systemPurple)
-        }
 
-        graph.addNode(profile)
-        graph.addNode(settings)
-        graph.addNode(register)
-        
-        // Build an onboarding subgraph.
-        let onboardingGraph = NavigationGraph()
-        onboardingGraph.addNode(welcome)
-        onboardingGraph.addNode(register)
-        onboardingGraph.addEdge(Edge(from: welcome, to: register, transition: .push))
-        let onboarding = NavSubgraph(id: "onboarding", graph: onboardingGraph, start: welcome)
-        graph.addSubgraph(onboarding)
-        // Register edges in the main graph.
-        // Transform from home (Void) to profile (Bool).  Provide a
-        // default value; the actual decision will be produced by the
-        // profile screen itself.
-        graph.addEdge(Edge(from: welcome, to: profile, transition: .push) { _ in return User() })
-        // When profile completes with a value of true, navigate to
-        // settings modally.  The predicate evaluates the Bool.
-        graph.addEdge(Edge(from: profile, to: settings, transition: .modal, predicate: { value in value }))
-        // When profile completes with a value of false, navigate
-        // directly to registration.  Use a predicate that returns
-        // true when the value is false.
-        graph.addEdge(Edge(from: profile, to: register, transition: .push, predicate: { value in !value }))
-        graph.addEdge(Edge(from: settings, to: onboarding, transition: .modal))
+        let gender = GenderNode()
+        graph.addNode(gender)
+
+        let beyondBinary = BeyondBinaryNode()
+        graph.addNode(beyondBinary)
+
+        graph.addEdge(Edge(
+            from: welcome,
+            to: gender,
+            transition: .push,
+            predicate: {
+                $0 == .next
+            },
+            transform: { _ in
+                return nil
+            }
+        ))
+
+        graph.addEdge(Edge(
+            from: gender,
+            to: beyondBinary,
+            transition: .push,
+            predicate: {
+                $0 == .beyondBinary
+            }
+        ))
+
+        graph.addEdge(Edge(
+            from: beyondBinary,
+            to: gender,
+            transition: .push,
+            predicate: { _ in
+                return true
+            },
+            transform: { beyondBinaryResult in
+                switch beyondBinaryResult {
+                case .next(let selectedIdentity):
+                    return GenderViewController.InitialState(
+                        beyondBinaryDetail: selectedIdentity,
+                        gender: "Beyond Binary",
+                        name: nil
+                    )
+                case .signIn:
+                    return nil
+                }
+            }
+        ))
+
+        print("\(graph.prettyPrintOutline(from: "WelcomeNode"))")
 
         self.navController = NavigationController(
             graph: graph,
