@@ -43,9 +43,14 @@ public final class NavigationController: NSObject {
     /// transition used to present that node.  The last element
     /// represents the current screen.  When a view controller is
     /// popped, the corresponding entry is removed from this stack.
-    private var nodeStack: [StackItem] = []
-    private var nodeRegistry = NodeRegistry()
-    
+    private var nodeStack: [StackItem] = [] {
+        didSet {
+            print("""
+            Node Stack: \(nodeStack.map({ $0.node.fullyQualifiedId }))
+            """)
+        }
+    }
+
     /// A mapping from view controllers to the nodes they represent.
     //private var viewControllerToNode: [UIViewController: AnyNavNode] = [:]
     private var anyViewControllerToNode: [Int: AnyNavNode] = [:]
@@ -55,15 +60,12 @@ public final class NavigationController: NSObject {
     /// Creates a new navigation controller for the given graph and presenter.
     public init(
         graph: NavigationGraph,
-        nodeRegistry: NodeRegistry,
         navigationController: UINavigationController
     ) {
         self.graph = graph
-        self.nodeRegistry = nodeRegistry
         self.navigationController = navigationController
         super.init()
-        // Assign self as the navigation controller's delegate to be
-        // notified when view controllers are shown (including after pops).
+
         self.navigationController.delegate = self
     }
 
@@ -77,7 +79,10 @@ public final class NavigationController: NSObject {
             fatalError("Starting node \(start.id) is not registered in the graph")
         }
 
-        print("NavigationController: Starting at node \(start.id) with data: \(data)")
+        print("""
+        ----------------------------
+        [NAV]: Starting at node \(start.id)
+        """)
         show(node: wrapped, data: data, incomingTransition: .push, graph: graph)
     }
 
@@ -96,27 +101,28 @@ public final class NavigationController: NSObject {
         graph currentGraph: NavigationGraph
     ) {
         
-        print("Showing: \(node.wrappedNode) - \(node.wrappedNode is (any ViewControllerProviding)) - \(type(of: data))")
-
         // If the node represents a nested subgraph, push it onto the
         // stack using the currentGraph (the parent graph), then
         // immediately navigate to the start node of the subgraph using
         // the subgraph's internal graph.
         if let wrapper = node.subgraphWrapper {
             // Log entering a subgraph.
-            print(
-                "NavigationController: entering subgraph \(wrapper.id) starting at \(wrapper.startNodeId) with data: \(data)"
-            )
+            print("""
+            ----------------------------
+            [NAV]: entering subgraph \(wrapper.id) starting at \(wrapper.startNodeId)
+            """)
             // Push the subgraph placeholder onto the stack.  Edges
             // leaving this placeholder live in the parent graph, so
             // record the parent graph as the graph to use for this
             // entry, along with the incoming transition.
+            /*
             nodeStack.append(StackItem(
                 node: node,
                 data: data,
                 graph: currentGraph,
                 incomingTransition: incomingTransition
             ))
+             */
             // Determine the start node of the subgraph.
             guard let startWrapped = wrapper.graph.nodes[wrapper.startNodeId] else {
                 fatalError("Start node \(wrapper.startNodeId) is not registered in subgraph \(wrapper.id)")
@@ -127,19 +133,10 @@ public final class NavigationController: NSObject {
             return
         }
         
-        // Push the node along with its data and the graph used to
-        // resolve its edges onto the stack.
-        nodeStack.append(StackItem(
-            node: node,
-            data: data,
-            graph: currentGraph,
-            incomingTransition: incomingTransition
-        ))
-        
         // UIViewController case, need to add SwiftUI View case
         guard
             let anyViewControllerProviding = node.anyViewControllerProviding,
-            let viewController = anyViewControllerProviding.viewControllerFactory?(data).wrapped as? (any NavigableViewController)
+            let viewController = anyViewControllerProviding.viewControllerFactory(data).wrapped as? (any NavigableViewController)
         else {
             fatalError("Couldn't find view controller provider.")
         }
@@ -151,14 +148,39 @@ public final class NavigationController: NSObject {
             guard let self, let viewController else { return }
             handleCompletion(from: viewController, output: output)
         }
-        
-        // If presenting modally, assign the presentation delegate so
-        // we are notified when the modal is dismissed.
-        if incomingTransition == .modal {
-            viewController.presentationController?.delegate = self
+
+        switch incomingTransition {
+        case .dismiss:
+            navigationController.dismiss(animated: true)
+            nodeStack.removeLast()
+        case .modal:
+            // iOS doesn't allow setting the delegate for alerts
+            if !(viewController is UIAlertController) {
+                viewController.presentationController?.delegate = self
+            }
             navigationController.present(viewController, animated: true)
-        } else {
+
+            nodeStack.append(StackItem(
+                node: node,
+                data: data,
+                graph: currentGraph,
+                incomingTransition: incomingTransition
+            ))
+        case .none:
+            break
+        case .pop:
+            // Should pop back to ancestor
+            navigationController.popViewController(animated: true)
+            nodeStack.removeLast()
+        case .push:
             navigationController.pushViewController(viewController, animated: true)
+            
+            nodeStack.append(StackItem(
+                node: node,
+                data: data,
+                graph: currentGraph,
+                incomingTransition: incomingTransition
+            ))
         }
     }
 
@@ -197,12 +219,15 @@ public final class NavigationController: NSObject {
         let nextData = chosen.applyTransform(output)
         // Log the chosen navigation step.  Include current node, destination,
         // transition type and a description of the data transformation.
-        let currentId = node.id
-        let nextId = chosen.toNode.id
+        //let currentId = node.id
+        //let nextId = chosen.toNode.id
         let transitionType = chosen.transition
-        print(
-            "NavigationController: will navigate from \(node.fullyQualifiedId) to \(chosen.toNode.fullyQualifiedId) via \(transitionType). Input data: \(output). Transformed data: \(nextData)"
-        )
+        print("""
+        -----------------------------------
+        \(node.fullyQualifiedId) --|\(transitionType)|--> \(chosen.toNode.fullyQualifiedId)
+        Input data: \(output)
+        Transformed data: \(nextData)
+        """)
         // Determine the destination node within the current graph.
         guard let dest = currentGraph.nodes[chosen.toNode.id] else {
             fatalError("Destination node \(chosen.toNode.id) is not registered in the current graph")
@@ -240,7 +265,10 @@ public final class NavigationController: NSObject {
         nodeStack.removeLast()
         // Log the pop.  Report the popped node and the new top of the stack if any.
         let newTop = nodeStack.last?.node.id ?? "none"
-        print("NavigationController: popped node \(poppedNode.id). Current node is now \(newTop)")
+        print("""
+        ------------------------------------
+        [NAV]: popped node \(poppedNode.id). Current node is now \(newTop)
+        """)
 
     }
 }
@@ -276,8 +304,4 @@ extension NavigationController: UIAdaptivePresentationControllerDelegate {
         let dismissedVC = presentationController.presentedViewController
         handlePop(for: dismissedVC)
     }
-}
-
-extension AnyNavNode {
-    
 }

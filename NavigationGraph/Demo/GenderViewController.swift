@@ -14,17 +14,18 @@ final class GenderNode: NavNode, ViewControllerProviding {
     typealias InputType = GenderViewController.InitialState?
     typealias OutputType = GenderViewController.GenderResult
 
-    let viewControllerFactory: ((GenderViewController.InitialState?) -> GenderViewController)? = { initialState in
+    let viewControllerFactory: (GenderViewController.InitialState?) -> GenderViewController = { initialState in
         return GenderViewController(initialState: initialState)
     }
 }
 
 class GenderViewController: UIViewController, NavigableViewController {
 
-    enum GenderResult {
+    enum GenderResult: Equatable {
         case beyondBinary
-        case next
+        case error(String, String)
         case learnMore
+        case next(String)
     }
 
     struct InitialState {
@@ -64,7 +65,11 @@ class GenderViewController: UIViewController, NavigableViewController {
             .dropFirst()
             .sink { [weak self] _ in
                 guard let self else { return }
-                onComplete?(.next)
+                if let selectedGender = viewState.selectedGender {
+                    onComplete?(.next(selectedGender))
+                } else {
+                    onComplete?(.error("Nothing Selected", "Please select an option for what you identify as."))
+                }
             }
             .store(in: &cancellables)
 
@@ -192,7 +197,7 @@ struct GenderView: View {
             .safeAreaInset(edge: .bottom) {
                 // Bottom CTA Button
                 Button(action: {
-                    // Move to next onboarding screen
+                    self.viewState.didPressNext += 1
                 }) {
                     Text("Next")
                         .fontWeight(.semibold)

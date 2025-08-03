@@ -14,7 +14,7 @@ final class ForgotPasswordNode: NavNode, ViewControllerProviding {
     typealias InputType = String?
     typealias OutputType = Void
 
-    let viewControllerFactory: ((String?) -> ForgotPasswordViewController)? = { possibleEmail in
+    let viewControllerFactory: (String?) -> ForgotPasswordViewController = { possibleEmail in
         return ForgotPasswordViewController(initialEmailAddress: possibleEmail)
     }
 }

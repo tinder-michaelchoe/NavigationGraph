@@ -14,7 +14,7 @@ final class SignInHomeNode: NavNode, ViewControllerProviding {
     typealias InputType = Void
     typealias OutputType = String?
 
-    let viewControllerFactory: ((()) -> SigninViewController)? = { _ in
+    let viewControllerFactory: (()) -> SigninViewController = { _ in
         return SigninViewController()
     }
 }

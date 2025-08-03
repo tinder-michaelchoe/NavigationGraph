@@ -53,7 +53,7 @@ public final class NavigationGraph {
     /// Initializes an empty navigation graph.
     public init() {}
 
-    // MARK: Node registration
+    // MARK: - Node registration
 
     /// Adds a node to the graph.  If a node with the same id already
     /// exists, this method will replace it.  It is safe to add a
@@ -63,7 +63,7 @@ public final class NavigationGraph {
     public func addNode<N: NavNode>(_ node: N) -> Self {
         #if DEBUG
         if nodes[node.id] != nil {
-            fatalError("Node already exists in this graph. Check your registrations.")
+            fatalError("Node \(node.id) already exists in this graph \(N.self). Check your registrations.")
         }
         #endif
         let wrapped = AnyNavNode(node)
@@ -90,7 +90,7 @@ public final class NavigationGraph {
         return self
     }
 
-    // MARK: Edge registration
+    // MARK: - Edge registration
 
     /// Adds a directed edge to the graph.  Both the source and
     /// destination nodes must eventually be added to the graph for
@@ -101,20 +101,27 @@ public final class NavigationGraph {
     @discardableResult
     public func addEdge<From: NavNode, To: NavNode>(_ edge: Edge<From, To>) -> Self {
         let list = adjacency[edge.from.id] ?? []
-        let fromWrapped: AnyNavNode
+        let fromWrapped: AnyNavNode = nodes[edge.from.id]!
+
+        /*
         if let existingFrom = nodes[edge.from.id] {
             fromWrapped = existingFrom
         } else {
-            let placeholder = ScreenNode<From.InputType, From.OutputType>(edge.from.id)
-            fromWrapped = AnyNavNode(placeholder)
+            // TODO: Michael - Do we want to be able to put a placeholder in?
+            //let placeholder = ScreenNode<From.InputType, From.OutputType>(edge.from.id)
+            //fromWrapped = AnyNavNode(placeholder)
         }
-        let toWrapped: AnyNavNode
+         */
+        let toWrapped: AnyNavNode = nodes[edge.to.id]!
+
+        /*
         if let existingTo = nodes[edge.to.id] {
             toWrapped = existingTo
         } else {
-            let placeholder = ScreenNode<To.InputType, To.OutputType>(edge.to.id)
-            toWrapped = AnyNavNode(placeholder)
+            //let placeholder = ScreenNode<To.InputType, To.OutputType>(edge.to.id)
+            //toWrapped = AnyNavNode(placeholder)
         }
+         */
         let anyEdge = AnyNavEdge(edge, from: fromWrapped, to: toWrapped)
         adjacency[edge.from.id] = list + [anyEdge]
         return self
@@ -179,7 +186,7 @@ public final class NavigationGraph {
         return nodes.contains(where: { $0.key == node.id })
     }
 
-    // MARK: Pretty printing
+    // MARK: - Pretty printing
 
     /// Returns a human‑readable description of the provided path.  Each
     /// edge is formatted as `fromId --(transition)--> toId`.  If the

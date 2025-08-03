@@ -23,19 +23,13 @@ public final class ScreenNode<Input, Output>: NavNode, ViewControllerProviding {
         return "\(Self.self).\(_id)"
     }
     private let _id: String
-    let viewControllerFactory: ((Input) -> NodeViewController)?
+    let viewControllerFactory: (Input) -> NodeViewController
     
     public init(
         _ id: String,
-        viewControllerFactory: ((Input) -> NodeViewController)? = nil
+        viewControllerFactory: @escaping (Input) -> NodeViewController
     ) {
         self._id = id
         self.viewControllerFactory = viewControllerFactory
     }
 }
-
-/*
-protocol ViewProviding {
-    var viewFactory: ((_ data: Any?) -> (any View & NavigableViewController))? { get }
-}
-*/

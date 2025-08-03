@@ -14,7 +14,7 @@ final class WelcomeNode: NavNode, ViewControllerProviding {
     typealias InputType = Void
     typealias OutputType = WelcomeViewController.WelcomeResult
 
-    let viewControllerFactory: ((()) -> WelcomeViewController)? = { _ in
+    let viewControllerFactory: (()) -> WelcomeViewController = { _ in
         return WelcomeViewController()
     }
 }

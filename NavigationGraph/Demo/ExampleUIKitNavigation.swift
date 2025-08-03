@@ -17,11 +17,9 @@ final class AppCoordinator {
         self.uiNavigationController = UINavigationController()
         
         let graph = NavigationGraph()
-        let nodeRegistry = NodeRegistry()
-        
+
         let welcome = WelcomeNode()
         graph.addNode(welcome)
-        nodeRegistry.register(welcome)
 
         // Sign In Subgraph
         let signinGraph = NavigationGraph()
@@ -41,8 +39,6 @@ final class AppCoordinator {
         let signInSubgraph = NavSubgraph(id: "signInSubgraph", graph: signinGraph, start: signinHome)
         graph.addSubgraph(signInSubgraph)
         
-        nodeRegistry.register(signInSubgraph)
-
         graph.addEdge(Edge(
             from: welcome,
             to: signInSubgraph,
@@ -98,11 +94,172 @@ final class AppCoordinator {
             }
         ))
 
+        let oneShotErrorNode = OneShotAlertNode()
+        graph.addNode(oneShotErrorNode)
+
+        graph.addEdge(Edge(
+            from: gender,
+            to: oneShotErrorNode,
+            transition: .modal,
+            predicate: { result in
+                switch result {
+                case .error:
+                    return true
+                default:
+                    return false
+                }
+            },
+            transform: { genderResult in
+                switch genderResult {
+                case .error(let title, let message):
+                    return (title, message)
+                default:
+                    return ("", "")
+                }
+            }
+        ))
+
+        graph.addEdge(Edge(
+            from: oneShotErrorNode,
+            to: gender,
+            transition: .none,
+            predicate: { _ in
+                true
+            },
+            transform: {
+                return nil
+            }
+        ))
+
+        let genderLearnMore = GenderLearnMoreNode()
+        graph.addNode(genderLearnMore)
+
+        graph.addEdge(Edge(
+            from: gender,
+            to: genderLearnMore,
+            transition: .modal,
+            predicate: { result in
+                result == .learnMore
+            }
+        ))
+
+        let photos = PhotosNode()
+        let photosSelector = PhotosSelectorNode()
+        let map = MapNode()
+
+        // MARK: - Photo Selector Subgraph
+
+        let photoSelectorGraph = NavigationGraph()
+        photoSelectorGraph.addNode(photos)
+        photoSelectorGraph.addNode(photosSelector)
+
+        photoSelectorGraph.addEdge(Edge(
+            from: photos,
+            to: photosSelector,
+            transition: .modal,
+            predicate: { result in
+                return result == .photoSelector
+            }
+        ))
+
+        photoSelectorGraph.addEdge(Edge(
+            from: photosSelector,
+            to: photos,
+            transition: .dismiss,
+            predicate: { _ in
+                true
+            }
+        ))
+
+        let photoSelectorSubgraph = NavSubgraph(id: "photoSelector", graph: photoSelectorGraph, start: photos)
+
+        // MARK: - Photo to Map Subgraph
+
+        let photosToMapGraph = NavigationGraph()
+        photosToMapGraph.addNode(map)
+        photosToMapGraph.addSubgraph(photoSelectorSubgraph)
+
+        photosToMapGraph.addEdge(Edge(
+            from: photoSelectorSubgraph,
+            to: map,
+            transition: .push,
+            predicate: { _ in
+                true
+            }
+        ))
+
+        let photosToMapSubgraph = NavSubgraph(id: "photosToMap", graph: photosToMapGraph, start: photoSelectorSubgraph)
+        graph.addSubgraph(photosToMapSubgraph)
+
+        graph.addEdge(Edge(
+            from: gender,
+            to: photosToMapSubgraph,
+            transition: .push,
+            predicate: { result in
+                guard
+                    case let GenderViewController.GenderResult.next(gender) = result,
+                    gender == "Woman"
+                else {
+                    return false
+                }
+                return true
+            }
+        ))
+
+        // MARK: - Map to Photo Subgraph
+
+        let mapToPhotosGraph = NavigationGraph()
+        mapToPhotosGraph.addNode(map)
+        mapToPhotosGraph.addSubgraph(photoSelectorSubgraph)
+
+        mapToPhotosGraph.addEdge(Edge(
+            from: map,
+            to: photoSelectorSubgraph,
+            transition: .push,
+            predicate: { _ in
+                true
+            }
+        ))
+        
+        let mapToPhotosSubgraph = NavSubgraph(id: "mapToPhotos", graph: mapToPhotosGraph, start: map)
+        graph.addSubgraph(mapToPhotosSubgraph)
+
+        graph.addEdge(Edge(
+            from: gender,
+            to: mapToPhotosSubgraph,
+            transition: .push,
+            predicate: { result in
+                guard
+                    case let GenderViewController.GenderResult.next(gender) = result,
+                    gender == "Man"
+                else {
+                    return false
+                }
+                return true
+            }
+        ))
+
+        let end = EndNode()
+        graph.addNode(end)
+
+        graph.addEdge(Edge(
+            from: mapToPhotosSubgraph,
+            to: end,
+            transition: .push,
+            predicate: { _ in true }
+        ))
+
+        graph.addEdge(Edge(
+            from: photosToMapSubgraph,
+            to: end,
+            transition: .push,
+            predicate: { _ in true }
+        ))
+
         print("\(graph.prettyPrintOutline(from: "WelcomeNode"))")
 
         self.navController = NavigationController(
             graph: graph,
-            nodeRegistry: nodeRegistry,
             navigationController: uiNavigationController
         )
     }
@@ -119,25 +276,3 @@ final class AppCoordinator {
         navController.start(at: WelcomeNode(), with: ())
     }
 }
-
-/*
-// Convenience functions for working with NodeRegistry
-extension AppCoordinator {
-    func addEdge<From: NavNode, To: NavNode>(
-        from: From.Type,
-        to: To.Type,
-        transition: TransitionType,
-        predicate: ((From.OutputType) -> Bool)? = nil,
-        transform: @escaping (From.OutputType) -> To.InputType
-    ) {
-        let edge = Edge<From, To>(
-            from: nodeRegistry.resolve(from),
-            to: nodeRegistry.resolve(to),
-            transition: transition,
-            predicate: predicate,
-            transform: transform
-        )
-        graph.addEdge(edge)
-    }
-}
-*/

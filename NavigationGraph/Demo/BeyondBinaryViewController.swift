@@ -14,7 +14,7 @@ final class BeyondBinaryNode: NavNode, ViewControllerProviding {
     typealias InputType = Void
     typealias OutputType = BeyondBinaryViewController.BeyondBinaryResult
 
-    let viewControllerFactory: ((()) -> BeyondBinaryViewController)? = { _ in
+    let viewControllerFactory: (()) -> BeyondBinaryViewController = { _ in
         return BeyondBinaryViewController()
     }
 }
