@@ -100,28 +100,15 @@ public final class NavigationGraph {
     /// have not been registered.
     @discardableResult
     public func addEdge<From: NavNode, To: NavNode>(_ edge: Edge<From, To>) -> Self {
+        guard let fromWrapped = nodes[edge.from.id] else {
+            fatalError("From Node `\(edge.from.id)` doesn't exist in graph `\(self)`")
+        }
+
+        guard let toWrapped = nodes[edge.to.id] else {
+            fatalError("To Node `\(edge.to.id)` doesn't exist in graph `\(self)`")
+        }
+
         let list = adjacency[edge.from.id] ?? []
-        let fromWrapped: AnyNavNode = nodes[edge.from.id]!
-
-        /*
-        if let existingFrom = nodes[edge.from.id] {
-            fromWrapped = existingFrom
-        } else {
-            // TODO: Michael - Do we want to be able to put a placeholder in?
-            //let placeholder = ScreenNode<From.InputType, From.OutputType>(edge.from.id)
-            //fromWrapped = AnyNavNode(placeholder)
-        }
-         */
-        let toWrapped: AnyNavNode = nodes[edge.to.id]!
-
-        /*
-        if let existingTo = nodes[edge.to.id] {
-            toWrapped = existingTo
-        } else {
-            //let placeholder = ScreenNode<To.InputType, To.OutputType>(edge.to.id)
-            //toWrapped = AnyNavNode(placeholder)
-        }
-         */
         let anyEdge = AnyNavEdge(edge, from: fromWrapped, to: toWrapped)
         adjacency[edge.from.id] = list + [anyEdge]
         return self

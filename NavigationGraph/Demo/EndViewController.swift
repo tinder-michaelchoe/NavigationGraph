@@ -21,9 +21,8 @@ final class EndNode: NavNode, ViewControllerProviding {
 
 class EndViewController: UIViewController, NavigableViewController {
 
-    enum EndResult {
-        case next
-        case signIn
+    enum EndResult: Equatable {
+        case reset
     }
 
     var onComplete: ((EndResult) -> Void)?
@@ -47,15 +46,7 @@ class EndViewController: UIViewController, NavigableViewController {
             .dropFirst()
             .sink { [weak self] _ in
                 guard let self else { return }
-                onComplete?(.next)
-            }
-            .store(in: &cancellables)
-
-        hostedView.rootView.viewState.$didPressSignIn
-            .dropFirst()
-            .sink { [weak self] _ in
-                guard let self else { return }
-                onComplete?(.signIn)
+                onComplete?(.reset)
             }
             .store(in: &cancellables)
 
@@ -76,7 +67,6 @@ class EndViewController: UIViewController, NavigableViewController {
 
 class EndViewState: ObservableObject {
     @Published var didPressNext: Int = 0
-    @Published var didPressSignIn: Int = 0
 }
 
 struct EndView: View {
@@ -122,7 +112,7 @@ struct EndView: View {
 
             // Start Over Button
             Button(action: {
-                // Restart the onboarding process
+                self.viewState.didPressNext += 1
             }) {
                 Text("Start Over")
                     .fontWeight(.semibold)

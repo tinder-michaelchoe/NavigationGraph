@@ -24,6 +24,10 @@ public final class NavigationController: NSObject {
         let data: Any
         let graph: NavigationGraph
         let incomingTransition: TransitionType
+        /// The subgraph node that this item belongs to, if any.
+        /// This allows us to identify which nodes are part of which subgraph
+        /// and recursively check parent subgraphs for outgoing edges.
+        let parentSubgraphNode: AnyNavNode?
     }
     
     /// The top‑level navigation graph describing the flow.
@@ -46,7 +50,22 @@ public final class NavigationController: NSObject {
     private var nodeStack: [StackItem] = [] {
         didSet {
             print("""
-            Node Stack: \(nodeStack.map({ $0.node.fullyQualifiedId }))
+            -------------
+            [NAV]: Stack now contains \(nodeStack.count) items:
+            \(nodeStack.map(\.node.id).joined(separator: " -> "))
+            """)
+        }
+    }
+    
+    /// A stack tracking which subgraphs we're currently nested in.
+    /// When entering a subgraph, we push the subgraph node onto this stack.
+    /// When exiting (no edges found), we can look at this stack to find
+    /// the correct parent context for edge resolution.
+    private var subgraphStack: [AnyNavNode] = [] {
+        didSet {
+            print("""
+            [NAV]: Subgraph stack now contains \(subgraphStack.count) items:
+            \(subgraphStack.map(\.id).joined(separator: " -> "))
             """)
         }
     }
@@ -83,7 +102,7 @@ public final class NavigationController: NSObject {
         ----------------------------
         [NAV]: Starting at node \(start.id)
         """)
-        show(node: wrapped, data: data, incomingTransition: .push, graph: graph)
+        show(node: wrapped, data: data, incomingTransition: .push, graph: graph, parentSubgraphNode: nil)
     }
 
     /// Presents a node on screen using the provided data, transition
@@ -98,7 +117,8 @@ public final class NavigationController: NSObject {
         node: AnyNavNode,
         data: Any,
         incomingTransition: TransitionType,
-        graph currentGraph: NavigationGraph
+        graph currentGraph: NavigationGraph,
+        parentSubgraphNode: AnyNavNode? = nil
     ) {
         
         // If the node represents a nested subgraph, push it onto the
@@ -111,6 +131,11 @@ public final class NavigationController: NSObject {
             ----------------------------
             [NAV]: entering subgraph \(wrapper.id) starting at \(wrapper.startNodeId)
             """)
+            
+            // Push this subgraph onto the subgraph stack
+            subgraphStack.append(node)
+            print("[NAV DEBUG]: Pushed subgraph \(node.id) onto stack. Stack now: \(subgraphStack.map(\.id))")
+            
             // Push the subgraph placeholder onto the stack.  Edges
             // leaving this placeholder live in the parent graph, so
             // record the parent graph as the graph to use for this
@@ -129,7 +154,9 @@ public final class NavigationController: NSObject {
             }
             // Begin the subgraph flow.  Use the subgraph's internal
             // graph when resolving edges for nodes inside the subgraph.
-            show(node: startWrapped, data: data, incomingTransition: incomingTransition, graph: wrapper.graph)
+            // Pass the current subgraph node as the parent for nodes within this subgraph
+            print("[NAV DEBUG]: Entering subgraph \(node.id), setting parentSubgraphNode to \(node.id) for start node \(startWrapped.id)")
+            show(node: startWrapped, data: data, incomingTransition: incomingTransition, graph: wrapper.graph, parentSubgraphNode: node)
             return
         }
         
@@ -164,22 +191,37 @@ public final class NavigationController: NSObject {
                 node: node,
                 data: data,
                 graph: currentGraph,
-                incomingTransition: incomingTransition
+                incomingTransition: incomingTransition,
+                parentSubgraphNode: parentSubgraphNode
             ))
         case .none:
-            break
+            nodeStack.removeLast()
         case .pop:
             // Should pop back to ancestor
             navigationController.popViewController(animated: true)
             nodeStack.removeLast()
+        case .popTo(let index):
+
+            if index == 0 {
+                navigationController.popToRootViewController(animated: true)
+                nodeStack.removeLast(navigationController.viewControllers.count - 1)
+                //subgraphStack.removeAll()
+                return
+            }
+
+            let dropTotal = navigationController.viewControllers.count - index - 1
+
+            _ = navigationController.viewControllers.dropLast(dropTotal)
         case .push:
             navigationController.pushViewController(viewController, animated: true)
             
+            print("[NAV DEBUG]: Adding node \(node.id) to stack with parentSubgraphNode: \(parentSubgraphNode?.id ?? "nil")")
             nodeStack.append(StackItem(
                 node: node,
                 data: data,
                 graph: currentGraph,
-                incomingTransition: incomingTransition
+                incomingTransition: incomingTransition,
+                parentSubgraphNode: parentSubgraphNode
             ))
         }
     }
@@ -208,7 +250,15 @@ public final class NavigationController: NSObject {
             return edge.predicateAny(output)
         }
         guard !candidates.isEmpty else {
-            // No eligible edges; remain on the current screen.
+            // No eligible edges in current graph; try to exit subgraphs recursively
+            if tryExitSubgraph(for: node, with: output, from: view) {
+                return
+            }
+            // No eligible edges found at any level; remain on the current screen
+            print("""
+            -----------------------------------
+            [NAV]: No eligible edges found for \(node.fullyQualifiedId), staying on current screen
+            """)
             return
         }
         // Choose the first eligible edge.  If multiple edges are
@@ -242,12 +292,296 @@ public final class NavigationController: NSObject {
             // to avoid retain cycles.
             view.dismiss(animated: true) { [weak self] in
                 guard let self else { return }
-                show(node: dest, data: nextData, incomingTransition: chosen.transition, graph: currentGraph)
+                show(node: dest, data: nextData, incomingTransition: chosen.transition, graph: currentGraph, parentSubgraphNode: currentEntry.parentSubgraphNode)
             }
         } else {
-            show(node: dest, data: nextData, incomingTransition: chosen.transition, graph: currentGraph)
+            show(node: dest, data: nextData, incomingTransition: chosen.transition, graph: currentGraph, parentSubgraphNode: currentEntry.parentSubgraphNode)
         }
 
+    }
+    
+    /// Attempts to exit the current subgraph and find an edge in a parent subgraph.
+    /// Uses the subgraph stack to recursively check parent contexts until an edge is found.
+    /// Returns true if navigation occurred, false if no valid exit was found.
+    private func tryExitSubgraph(for node: AnyNavNode, with output: Any, from view: UIViewController) -> Bool {
+        guard !subgraphStack.isEmpty else {
+            print("[NAV DEBUG]: No subgraphs in stack, cannot exit")
+            return false
+        }
+        
+        print("[NAV DEBUG]: Trying to exit subgraph. Current node: \(node.id)")
+        print("[NAV DEBUG]: Subgraph stack: \(subgraphStack.map(\.id).joined(separator: " -> "))")
+        
+        // Try each subgraph in the stack, starting from the most recent (innermost)
+        for i in (0..<subgraphStack.count).reversed() {
+            let subgraphToExit = subgraphStack[i]
+            let parentGraph = findParentGraphForSubgraph(at: i)
+            
+            print("[NAV DEBUG]: Checking if we can exit subgraph \(subgraphToExit.id) into parent graph")
+            print("[NAV DEBUG]: Current node output type: \(type(of: output)), value: \(output)")
+            print("[NAV DEBUG]: Subgraph to exit: \(subgraphToExit.id)")
+            
+            // Check what edges exist for this subgraph
+            let subgraphEdges = parentGraph.adjacency[subgraphToExit.id] ?? []
+            print("[NAV DEBUG]: Subgraph \(subgraphToExit.id) has \(subgraphEdges.count) outgoing edges in parent graph")
+            
+            // IMPORTANT: When exiting a subgraph, we have a type mismatch issue:
+            // The subgraph's OutputType is based on its start node, but we're exiting from
+            // a different node with a different output type. We'll pass the original output
+            // and handle the type mismatch in the Edge's predicateAny wrapper.
+            let subgraphOutput: Any = output
+            print("[NAV DEBUG]: Using original output (\(type(of: output))) for subgraph edge predicate evaluation")
+            
+            if let edge = findEligibleEdge(for: subgraphToExit, with: subgraphOutput, in: parentGraph) {
+                print("""
+                -----------------------------------
+                [NAV]: Found exit! Exiting subgraph \(subgraphToExit.id) 
+                \(subgraphToExit.id) --|\(edge.transition)|--> \(edge.toNode.id)
+                """)
+                
+                // Remove all subgraphs from this level and deeper
+                subgraphStack.removeSubrange(i...)
+                print("[NAV DEBUG]: Cleaned subgraph stack, now contains: \(subgraphStack.map(\.id))")
+                
+                // Navigate to the destination
+                show(
+                    node: edge.toNode, 
+                    data: edge.applyTransform(output), 
+                    incomingTransition: edge.transition, 
+                    graph: parentGraph,
+                    parentSubgraphNode: subgraphStack.last
+                )
+                return true
+            }
+        }
+        
+        print("[NAV DEBUG]: No exit found at any level")
+        return false
+    }
+    
+    /// Try to exit at a specific subgraph level
+    private func tryExitAtLevel(parentSubgraphNode: AnyNavNode, output: Any, from view: UIViewController) -> Bool {
+        print("[NAV DEBUG]: Trying to find edges from \(parentSubgraphNode.id)")
+        
+        // Collect all possible graphs to check
+        var graphsToCheck: [(NavigationGraph, String)] = []
+        
+        // Add main graph
+        graphsToCheck.append((self.graph, "main graph"))
+        
+        // Add all subgraph internal graphs we can find by looking at any subgraph wrappers
+        // We need to check every possible subgraph's internal graph
+        for stackItem in nodeStack {
+            if let wrapper = stackItem.node.subgraphWrapper {
+                graphsToCheck.append((wrapper.graph, "subgraph \(stackItem.node.id)"))
+            }
+        }
+        
+        // Also check the immediate current graph context in case we missed it
+        if let currentEntry = nodeStack.last {
+            let currentGraph = currentEntry.graph
+            if !graphsToCheck.contains(where: { $0.0 === currentGraph }) {
+                graphsToCheck.append((currentGraph, "current graph"))
+            }
+        }
+        
+        print("[NAV DEBUG]: Checking \(graphsToCheck.count) possible graphs")
+        
+        // Try each graph until we find one with edges from our parent subgraph
+        for (graph, description) in graphsToCheck {
+            print("[NAV DEBUG]: Checking \(description) for edges from \(parentSubgraphNode.id)")
+            
+            if let chosen = findEligibleEdge(for: parentSubgraphNode, with: output, in: graph) {
+                print("""
+                -----------------------------------
+                [NAV]: Found exit in \(description)! 
+                \(parentSubgraphNode.fullyQualifiedId) --|\(chosen.transition)|--> \(chosen.toNode.fullyQualifiedId)
+                """)
+                
+                navigateUsingEdge(chosen, with: output, from: view, in: graph, exitingSubgraph: parentSubgraphNode)
+                return true
+            }
+        }
+        
+        print("[NAV DEBUG]: No exit found in any graph for subgraph \(parentSubgraphNode.id)")
+        return false
+    }
+    
+    /// Finds the correct parent graph for a subgraph at the given index in the subgraph stack.
+    /// - Parameter index: The index in the subgraph stack (0 = outermost, count-1 = innermost)
+    /// - Returns: The graph that contains edges from the subgraph at this level
+    private func findParentGraphForSubgraph(at index: Int) -> NavigationGraph {
+        print("[NAV DEBUG]: Finding parent graph for subgraph at index \(index)")
+        if index == 0 {
+            // The outermost subgraph's parent is always the main graph
+            print("[NAV DEBUG]: Returning main graph for outermost subgraph")
+            return self.graph
+        } else {
+            // For nested subgraphs, the parent is the internal graph of the subgraph one level up
+            let parentSubgraph = subgraphStack[index - 1]
+            print("[NAV DEBUG]: Parent subgraph is \(parentSubgraph.id)")
+            guard let parentWrapper = parentSubgraph.subgraphWrapper else {
+                fatalError("Subgraph \(parentSubgraph.id) has no wrapper")
+            }
+            print("[NAV DEBUG]: Returning internal graph of \(parentSubgraph.id)")
+            return parentWrapper.graph
+        }
+    }
+    
+    /// Recursively attempts to exit further up the subgraph hierarchy
+    private func tryExitSubgraphRecursively(for subgraphNode: AnyNavNode, with output: Any, from view: UIViewController) -> Bool {
+        // Find which stack item contains this subgraph node to get its parent subgraph
+        guard let subgraphStackItem = nodeStack.first(where: { $0.node.id == subgraphNode.id }),
+              let parentSubgraphNode = subgraphStackItem.parentSubgraphNode else {
+            return false
+        }
+        
+        // Find the parent graph for this level
+        guard let parentGraph = findParentGraph(for: parentSubgraphNode) else {
+            return false
+        }
+        
+        // Check for edges from the parent subgraph
+        if let chosen = findEligibleEdge(for: parentSubgraphNode, with: output, in: parentGraph) {
+            print("""
+            -----------------------------------
+            [NAV]: Exiting nested subgraph \(parentSubgraphNode.id)
+            \(parentSubgraphNode.fullyQualifiedId) --|\(chosen.transition)|--> \(chosen.toNode.fullyQualifiedId)
+            Input data: \(output)
+            """)
+            
+            navigateUsingEdge(chosen, with: output, from: view, in: parentGraph, exitingSubgraph: parentSubgraphNode)
+            return true
+        }
+        
+        // Continue recursively up the hierarchy
+        return tryExitSubgraphRecursively(for: parentSubgraphNode, with: output, from: view)
+    }
+    
+    /// Finds an eligible edge for a node with given output in the specified graph
+    private func findEligibleEdge(for node: AnyNavNode, with output: Any, in graph: NavigationGraph) -> AnyNavEdge? {
+        let edges = graph.adjacency[node.id] ?? []
+        print("[NAV DEBUG]: Checking \(edges.count) edges for node \(node.id)")
+        print("[NAV DEBUG]: Output data type: \(type(of: output)), value: \(output)")
+        print("[NAV DEBUG]: Node ID being searched: '\(node.id)'")
+        
+        // First, let's see what keys are actually in the adjacency list
+        print("[NAV DEBUG]: Available nodes in adjacency list: \(Array(graph.adjacency.keys).sorted())")
+        
+        let candidates = edges.filter { edge in
+            print("[NAV DEBUG]: Evaluating edge \(node.id) -> \(edge.toNode.id)")
+            print("[NAV DEBUG]: Edge ID: \(edge.id)")
+            
+            // Let's try to see what happens in the predicate
+            print("[NAV DEBUG]: About to call predicateAny with \(type(of: output))")
+            let result = edge.predicateAny(output)
+            print("[NAV DEBUG]: Edge \(node.id) -> \(edge.toNode.id): predicate result = \(result)")
+            
+            if !result {
+                print("[NAV DEBUG]: Predicate failed! This suggests a type mismatch or other issue")
+                print("[NAV DEBUG]: Testing predicate with different types to understand what it expects...")
+                
+                // Test with void
+                print("[NAV DEBUG]: Testing predicate with () (void)...")
+                let voidResult = edge.predicateAny(())
+                print("[NAV DEBUG]: Predicate with void: \(voidResult)")
+                
+                // Test with String
+                print("[NAV DEBUG]: Testing predicate with String...")
+                let stringResult = edge.predicateAny("test")
+                print("[NAV DEBUG]: Predicate with string: \(stringResult)")
+                
+                // Test with Int
+                print("[NAV DEBUG]: Testing predicate with Int...")
+                let intResult = edge.predicateAny(42)
+                print("[NAV DEBUG]: Predicate with int: \(intResult)")
+                
+                // Test with a dummy struct
+                struct DummyOutput {}
+                let dummyResult = edge.predicateAny(DummyOutput())
+                print("[NAV DEBUG]: Predicate with DummyOutput: \(dummyResult)")
+                
+                // Let's also inspect the edge to see if we can understand what it expects
+                print("[NAV DEBUG]: Edge fromNode type: \(type(of: edge.fromNode))")
+                print("[NAV DEBUG]: Edge fromNode id: \(edge.fromNode.id)")
+            }
+            
+            return result
+        }
+        
+        print("[NAV DEBUG]: Found \(candidates.count) eligible edges for node \(node.id)")
+        return candidates.first
+    }
+    
+    /// Finds the parent graph that contains the given subgraph node
+    private func findParentGraph(for subgraphNode: AnyNavNode) -> NavigationGraph? {
+        // Look through the stack to find where this subgraph was added
+        for (index, stackItem) in nodeStack.enumerated() {
+            if stackItem.node.id == subgraphNode.id {
+                // The parent graph is the graph from the previous stack level,
+                // or the main graph if this is at the top level
+                if index > 0 {
+                    return nodeStack[index - 1].graph
+                } else {
+                    return graph // Return the main graph
+                }
+            }
+        }
+        
+        // If not found in stack, this subgraph must be at the top level
+        return graph
+    }
+    
+    /// Navigates using the chosen edge, cleaning up subgraph stack items as needed
+    private func navigateUsingEdge(_ edge: AnyNavEdge, with output: Any, from view: UIViewController, in graph: NavigationGraph, exitingSubgraph: AnyNavNode) {
+        let nextData = edge.applyTransform(output)
+        
+        // Clean up the stack: remove all items that belong to the exiting subgraph
+        cleanupStackForSubgraphExit(exitingSubgraph: exitingSubgraph)
+        
+        guard let dest = graph.nodes[edge.toNode.id] else {
+            fatalError("Destination node \(edge.toNode.id) is not registered in the graph")
+        }
+        
+        // Determine the parent subgraph context for the new destination
+        let newParentSubgraph = findParentSubgraphForDestination(in: graph)
+        
+        // Handle modal dismissal before showing next node
+        if let currentEntry = nodeStack.last, currentEntry.incomingTransition == .modal {
+            view.dismiss(animated: true) { [weak self] in
+                guard let self else { return }
+                self.show(node: dest, data: nextData, incomingTransition: edge.transition, graph: graph, parentSubgraphNode: newParentSubgraph)
+            }
+        } else {
+            show(node: dest, data: nextData, incomingTransition: edge.transition, graph: graph, parentSubgraphNode: newParentSubgraph)
+        }
+    }
+    
+    /// Cleans up stack items that belong to the exiting subgraph
+    private func cleanupStackForSubgraphExit(exitingSubgraph: AnyNavNode) {
+        // Remove all items from the stack that belong to the exiting subgraph
+        while let lastItem = nodeStack.last, 
+              lastItem.parentSubgraphNode?.id == exitingSubgraph.id || lastItem.node.id == exitingSubgraph.id {
+            nodeStack.removeLast()
+        }
+    }
+    
+    /// Determines the parent subgraph context for a destination node in the given graph
+    private func findParentSubgraphForDestination(in graph: NavigationGraph) -> AnyNavNode? {
+        // If we're navigating within the main graph, no parent subgraph
+        if graph === self.graph {
+            return nil
+        }
+        
+        // Find which subgraph contains this graph
+        for stackItem in nodeStack.reversed() {
+            if let subgraphWrapper = stackItem.node.subgraphWrapper,
+               subgraphWrapper.graph === graph {
+                return stackItem.node
+            }
+        }
+        
+        return nil
     }
 
     /// Handles the case where a view controller has been popped or

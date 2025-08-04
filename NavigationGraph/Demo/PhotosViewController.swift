@@ -147,8 +147,9 @@ struct PhotosView: View {
             .padding(.horizontal)
 
             Spacer()
-
-            // Continue Button
+        }
+        .safeAreaInset(edge: .bottom) {
+            // Bottom CTA Button
             Button(action: {
                 self.viewState.didPressNext += 1
             }) {
@@ -160,11 +161,12 @@ struct PhotosView: View {
                     .background(Color(red: 139/255, green: 0, blue: 0))
                     .cornerRadius(30)
                     .padding(.horizontal)
+                    .padding(.bottom, 8)
             }
-            .padding(.bottom, 26)
-            .disabled(selectedIndices.count < 2) // enforce min photo selection
-            .opacity(selectedIndices.count < 2 ? 0.5 : 1)
-            Spacer()
+            //.disabled(selectedIndices.count < 2) // enforce min photo selection
+            //.opacity(selectedIndices.count < 2 ? 0.5 : 1)
+            .background(Color(.systemBackground).ignoresSafeArea(edges: .bottom))
+            .padding(.bottom, 48)
         }
         .padding(.horizontal)
         .navigationTitle("Photo Setup")

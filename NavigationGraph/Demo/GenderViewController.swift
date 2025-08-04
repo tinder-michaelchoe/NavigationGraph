@@ -195,7 +195,6 @@ struct GenderView: View {
                 .padding(.bottom, 80) // space for bottom button
             }
             .safeAreaInset(edge: .bottom) {
-                // Bottom CTA Button
                 Button(action: {
                     self.viewState.didPressNext += 1
                 }) {

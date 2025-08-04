@@ -75,7 +75,6 @@ struct ForgotPasswordView: View {
     @ObservedObject var viewState: ForgotPasswordViewState
 
     @State private var email: String = ""
-    @State private var showConfirmation: Bool = false
 
     var body: some View {
         VStack(spacing: 24) {
@@ -106,8 +105,7 @@ struct ForgotPasswordView: View {
 
             // Submit Button
             Button(action: {
-                // Handle forgot password request
-                showConfirmation = true
+                self.viewState.didPressNext += 1
             }) {
                 Text("Send Reset Link")
                     .fontWeight(.semibold)
@@ -121,13 +119,5 @@ struct ForgotPasswordView: View {
 
             Spacer()
         }
-        .alert(isPresented: $showConfirmation) {
-            Alert(
-                title: Text("Check Your Email"),
-                message: Text("We've sent a password reset link to \(email)."),
-                dismissButton: .default(Text("OK"))
-            )
-        }
     }
-
 }

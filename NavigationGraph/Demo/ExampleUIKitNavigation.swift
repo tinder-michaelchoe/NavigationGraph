@@ -21,21 +21,57 @@ final class AppCoordinator {
         let welcome = WelcomeNode()
         graph.addNode(welcome)
 
+        let oneShotErrorNode = OneShotAlertNode()
+        graph.addNode(oneShotErrorNode)
+
         // Sign In Subgraph
         let signinGraph = NavigationGraph()
         let signinHome = SignInHomeNode()
         let forgotPassword = ForgotPasswordNode()
         signinGraph.addNode(signinHome)
         signinGraph.addNode(forgotPassword)
-        
+        signinGraph.addNode(oneShotErrorNode)
+
         signinGraph.addEdge(Edge(
             from: signinHome,
             to: forgotPassword,
             transition: .push,
-            transform: { possibleEmail in
-                return possibleEmail ?? ""
+            predicate: { result in
+                switch result {
+                case .forgotPassword(_):
+                    return true
+                case .signIn:
+                    return false
+                }
+            },
+            transform: { result in
+                guard case let SignInViewController.SignInResult.forgotPassword(possibleEmail) = result else {
+                    return ""
+                }
+                return possibleEmail
             }
         ))
+
+        signinGraph.addEdge(Edge(
+            from: forgotPassword,
+            to: oneShotErrorNode,
+            transition: .modal,
+            predicate: { _ in true },
+            transform: { _ in
+                return ("Check your email", "We sent a password reset link.")
+            }
+        ))
+
+        signinGraph.addEdge(Edge(
+            from: oneShotErrorNode,
+            to: forgotPassword,
+            transition: .none,
+            predicate: { _ in true },
+            transform: { _ in
+                return nil
+            }
+        ))
+
         let signInSubgraph = NavSubgraph(id: "signInSubgraph", graph: signinGraph, start: signinHome)
         graph.addSubgraph(signInSubgraph)
         
@@ -93,9 +129,6 @@ final class AppCoordinator {
                 }
             }
         ))
-
-        let oneShotErrorNode = OneShotAlertNode()
-        graph.addNode(oneShotErrorNode)
 
         graph.addEdge(Edge(
             from: gender,
@@ -198,7 +231,7 @@ final class AppCoordinator {
             predicate: { result in
                 guard
                     case let GenderViewController.GenderResult.next(gender) = result,
-                    gender == "Woman"
+                    gender == "Woman" || gender == "Beyond Binary"
                 else {
                     return false
                 }
@@ -253,6 +286,22 @@ final class AppCoordinator {
             from: photosToMapSubgraph,
             to: end,
             transition: .push,
+            predicate: { _ in true }
+        ))
+
+        graph.addEdge(Edge(
+            from: signInSubgraph,
+            to: end,
+            transition: .push,
+            predicate: { result in
+                result == .signIn
+            }
+        ))
+
+        graph.addEdge(Edge(
+            from: end,
+            to: welcome,
+            transition: .popTo(0),
             predicate: { _ in true }
         ))
 

@@ -12,16 +12,21 @@ import UIKit
 final class SignInHomeNode: NavNode, ViewControllerProviding {
 
     typealias InputType = Void
-    typealias OutputType = String?
+    typealias OutputType = SignInViewController.SignInResult
 
-    let viewControllerFactory: (()) -> SigninViewController = { _ in
-        return SigninViewController()
+    let viewControllerFactory: (()) -> SignInViewController = { _ in
+        return SignInViewController()
     }
 }
 
-class SigninViewController: UIViewController, NavigableViewController {
+class SignInViewController: UIViewController, NavigableViewController {
 
-    var onComplete: ((String?) -> Void)?
+    enum SignInResult: Equatable {
+        case signIn
+        case forgotPassword(String?)
+    }
+
+    var onComplete: ((SignInResult) -> Void)?
 
     private var cancellables = Set<AnyCancellable>()
     private lazy var hostedView = UIHostingController(rootView: SigninView(viewState: viewState))
@@ -42,7 +47,15 @@ class SigninViewController: UIViewController, NavigableViewController {
             .dropFirst()
             .sink { [weak self] _ in
                 guard let self else { return }
-                onComplete?(viewState.partialEmail)
+                onComplete?(.forgotPassword(viewState.partialEmail))
+            }
+            .store(in: &cancellables)
+
+        hostedView.rootView.viewState.$didPressSignIn
+            .dropFirst()
+            .sink { [weak self] _ in
+                guard let self else { return }
+                onComplete?(.signIn)
             }
             .store(in: &cancellables)
 
@@ -63,6 +76,7 @@ class SigninViewController: UIViewController, NavigableViewController {
 
 class SigninViewState: ObservableObject {
     @Published var didPressForgotPassword: Int = 0
+    @Published var didPressSignIn: Int = 0
 
     var partialEmail: String?
 }
@@ -122,7 +136,7 @@ struct SigninView: View {
 
             // Submit Button
             Button(action: {
-                // Handle sign-in action
+                self.viewState.didPressSignIn += 1
             }) {
                 Text("Sign In")
                     .fontWeight(.semibold)

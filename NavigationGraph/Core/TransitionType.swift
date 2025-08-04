@@ -5,12 +5,13 @@
 //  Created by mexicanpizza on 7/29/25.
 //
 
-public enum TransitionType: CustomStringConvertible {
+public enum TransitionType: Equatable, CustomStringConvertible {
     case push
     case modal
     case none
     /// Pop transitions are only valid when navigating back to an ancestor in the back stack.
     case pop
+    case popTo(Int)
     case dismiss
 
     /// A textual representation of the transition, used by the
@@ -21,6 +22,7 @@ public enum TransitionType: CustomStringConvertible {
         case .none: return "none"
         case .modal: return "modal"
         case .pop: return "pop"
+        case .popTo(let index): return "popTo \(index)"
         case .dismiss: return "dismiss"
         }
     }
