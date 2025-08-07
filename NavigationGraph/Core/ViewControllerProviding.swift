@@ -10,7 +10,7 @@ protocol ViewControllerProviding {
 /// A type-erased wrapper for any `ViewControllerProviding`.
 public struct AnyViewControllerProviding: ViewControllerProviding {
     public typealias Input = Any
-    public typealias ViewController = AnyNavigableViewController
+    typealias ViewController = AnyNavigableViewController
     
     private let _viewControllerFactory: (Any) -> AnyNavigableViewController
     

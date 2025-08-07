@@ -7,58 +7,36 @@ import UIKit
 
 /*
  
- Things to ask ChatGPT
- - Can we make the onComplete closure strongly typed?
+Feature Ideas
  - DSL for declaring Navigation Graphs
  - When presenting a modal, it should automaitcally create a new navigation controller and navigation graph.
- - Create a sample for a modal
- - Move the logging out of the view controllers and into the navigation controller
  - Rehydrating navigation stack
  - Creating navigation graphs from Codables
  - Deep linking into a certain point in a navigation stack
  - Restore functionality of awaitCompletion(). Each NavNode should be async.
  - Ability to register edges in priority. This may be helpful in ensuring that there will always be a valid flow.
  - Include check to make sure no nodes are repeated
- 
- Presentation
- - My goal is to give a sandbox of tools that product, design, and data science can use.
- - The goal is that those desire should be the driving factor and the thing that should be the most scalable.
- - 
- 
- 
+ - When pressing Ok on modal, the navigation controller should actually perform the dismiss, not the VC
+
  */
 
 
 // MARK: - Navigation graph
 
-/// A `NavigationGraph` stores a collection of nodes and the edges
-/// connecting them.  It supports adding nodes and edges, querying
-/// reachability, computing paths between nodes and pretty‑printing
-/// paths for debugging.  Nodes and edges may be registered in any
-/// order; edges referencing nodes that have not yet been added will
-/// assert when used but can be added to the adjacency map in advance.
+/// A `NavigationGraph` stores a collection of nodes and the edges connecting them.
 public final class NavigationGraph {
-    /// A dictionary mapping node identifiers to their erased node
-    /// wrappers.  Each entry must be unique.  These members are
-    /// `internal` rather than `private` to allow the navigation
-    /// controller to inspect the graph when resolving flows.  They
-    /// remain hidden from external modules because the entire file
-    /// belongs to the same module.
+
+    /// A dictionary mapping node identifiers to their erased node wrappers.  Each entry must be unique.
     var nodes: [String: AnyNavNode] = [:]
-    /// An adjacency map from node identifiers to their outgoing
-    /// edges.  Edges may be registered before the corresponding
-    /// nodes, but will only be usable once both nodes are present.
+
+    /// An adjacency map from node identifiers to their outgoing edges.
     var adjacency: [String: [AnyNavEdge]] = [:]
 
-    /// Initializes an empty navigation graph.
     public init() {}
 
     // MARK: - Node registration
 
-    /// Adds a node to the graph.  If a node with the same id already
-    /// exists, this method will replace it.  It is safe to add a
-    /// node after registering edges; once both the source and
-    /// destination nodes of an edge exist, that edge becomes valid.
+    /// Adds a node to the graph.  If a node with the same id already exists, this method will replace it.
     @discardableResult
     public func addNode<N: NavNode>(_ node: N) -> Self {
         #if DEBUG
@@ -76,8 +54,8 @@ public final class NavigationGraph {
 
     /// Adds a subgraph as a node in this graph.  The subgraph is
     /// represented as a single node whose `DataType` matches the
-    /// `DataType` of its start node.  Once added, you can connect
-    /// edges to and from the subgraph just like any other node.  To
+    /// `DataType` of its start node. Once added, you can connect
+    /// edges to and from the subgraph just like any other node. To
     /// navigate within the subgraph, call `findPath` on the
     /// subgraph's internal `NavigationGraph`.
     @discardableResult
@@ -92,12 +70,7 @@ public final class NavigationGraph {
 
     // MARK: - Edge registration
 
-    /// Adds a directed edge to the graph.  Both the source and
-    /// destination nodes must eventually be added to the graph for
-    /// navigation to be valid.  The graph does not check that the
-    /// nodes exist at the time of registration; however, runtime
-    /// errors will occur if navigation is attempted between nodes that
-    /// have not been registered.
+    /// Adds a directed edge to the graph.
     @discardableResult
     public func addEdge<From: NavNode, To: NavNode>(_ edge: Edge<From, To>) -> Self {
         guard let fromWrapped = nodes[edge.from.id] else {
@@ -117,26 +90,21 @@ public final class NavigationGraph {
     // MARK: Reachability and path finding
 
     /// Returns a boolean indicating whether a path exists between the
-    /// specified source and destination nodes.  If either node is not
-    /// registered in the graph, the function returns `false`.
+    /// specified source id and destination id nodes.
     public func canNavigate(from sourceId: String, to destinationId: String) -> Bool {
         return findPath(from: sourceId, to: destinationId) != nil
     }
 
-    /// Returns a boolean indicating whether a path exists between the
-    /// specified source and destination nodes.  Generic overload that
-    /// accepts node instances directly.
+    /// Generic overload that accepts node instances directly.
     public func canNavigate<From: NavNode, To: NavNode>(from source: From, to destination: To) -> Bool {
         return canNavigate(from: source.id, to: destination.id)
     }
 
     /// Finds a path from the node with id `sourceId` to the node
-    /// `destinationId` using breadth‑first search.  Returns an array
-    /// of erased edges representing the path, or `nil` if no path
-    /// exists.  Nested subgraphs are treated as atomic nodes; this
-    /// implementation does not automatically descend into a subgraph's
-    /// internal graph.
-    public func findPath(from sourceId: String, to destinationId: String) -> [AnyNavEdge]? {
+    /// `destinationId` using breadth‑first search.
+    ///
+    /// TODO [Michael] Add subgraph support
+    func findPath(from sourceId: String, to destinationId: String) -> [AnyNavEdge]? {
         guard nodes[sourceId] != nil, nodes[destinationId] != nil else {
             return nil
         }
@@ -160,10 +128,8 @@ public final class NavigationGraph {
         return nil
     }
 
-    /// Generic overload of `findPath` that accepts node instances
-    /// directly.  Returns a typed array of erased edges representing
-    /// the path, or `nil` if no path exists.
-    public func findPath<From: NavNode, To: NavNode>(from source: From, to destination: To) -> [AnyNavEdge]? {
+    /// Generic overload of `findPath` that accepts node instances directly.
+    func findPath<From: NavNode, To: NavNode>(from source: From, to destination: To) -> [AnyNavEdge]? {
         return findPath(from: source.id, to: destination.id)
     }
     
@@ -178,7 +144,7 @@ public final class NavigationGraph {
     /// Returns a human‑readable description of the provided path.  Each
     /// edge is formatted as `fromId --(transition)--> toId`.  If the
     /// path is empty, an empty string is returned.
-    public func prettyPrintPath(_ path: [AnyNavEdge]) -> String {
+    func prettyPrintPath(_ path: [AnyNavEdge]) -> String {
         guard !path.isEmpty else { return "" }
         return path.map { edge in
             "\(edge.fromNode.id) --(\(edge.transition))--> \(edge.toNode.id)"
@@ -193,56 +159,29 @@ public final class NavigationGraph {
 /// node in a parent graph.  The `InputType` of the subgraph is the
 /// same as the `InputType` of its start node, and the `OutputType` of
 /// the subgraph is the same as the `OutputType` of its start node.
+///
+/// TODO [Michael] Make the OutputType more flexible, i.e. not just the start node
 public final class NavSubgraph<Start: NavNode>: NavNode {
+
     public typealias InputType = Start.InputType
     public typealias OutputType = Start.OutputType
+
     /// The identifier for the subgraph.  This identifier must be
     /// unique within the parent graph.
     public let id: String
+
     /// The internal navigation graph containing the nested flow.
     public let graph: NavigationGraph
+
     /// The identifier of the start node within the internal graph.
     public let startNodeId: String
 
-    /// Creates a new nested graph with the provided identifier,
-    /// internal graph and start node.  The caller is responsible for
-    /// ensuring that the start node exists within the internal graph
-    /// and that the subgraph id is unique within the parent graph.
     public init(id: String, graph: NavigationGraph, start: Start) {
         self.id = id
         self.graph = graph
         self.startNodeId = start.id
     }
 }
-
-/*
-// Provide a default async method for awaiting completion of a
-// navigable view controller.  This helper hides the use of
-// continuations so that callers can use async/await syntax
-// directly.  The returned value is the data passed to the
-// `onComplete` closure.
-extension NavigableViewController {
-    /// Waits asynchronously until the user completes this screen and
-    /// invokes the `onComplete` callback.  The returned value is
-    /// whatever was supplied to the callback.  You should call
-    /// `awaitCompletion()` only after presenting the view controller.
-    public func awaitCompletion() async -> Any {
-        return await withCheckedContinuation { (continuation: CheckedContinuation<Any, Never>) in
-            // Track whether the continuation has already been resumed.
-            var resumed = false
-            // Assign the completion handler.  If the handler is invoked
-            // more than once (e.g. due to both the user tapping "Next"
-            // and then navigating back), only resume the continuation
-            // the first time.  Subsequent invocations are ignored.
-            self.onComplete = { data in
-                guard !resumed else { return }
-                resumed = true
-                continuation.resume(returning: data)
-            }
-        }
-    }
-}
- */
 
 /// A protocol that abstracts over `NavSubgraph` without exposing its
 /// generic type.  It provides access to the nested graph and the

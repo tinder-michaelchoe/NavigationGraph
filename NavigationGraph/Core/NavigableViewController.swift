@@ -10,21 +10,19 @@ import UIKit
 /// A protocol that view controllers used by `NavigationController` must
 /// conform to.  It exposes an `onComplete` callback which should be
 /// invoked when the user has finished interacting with the screen.  The
-/// parameter to `onComplete` is the data returned from the screen; it
-/// must match the node's `OutputType`. `NavigationController` uses
-/// this callback to resume navigation.
+/// parameter to `onComplete` is the data returned from the screen and
+/// must match the node's `OutputType`.
 public protocol NavigableViewController: UIViewController {
     
     associatedtype CompletionType
     
-    /// Call this closure when the view controller's work is
-    /// complete.  Pass back any data produced by the screen.
+    /// Call this closure when the view controller's work is  complete.  Pass back any data produced by the screen.
     var onComplete: ((CompletionType) -> Void)? { get set }
 }
 
 /// Type-erased wrapper for any NavigableViewController.
 /// Allows using onComplete in a type-erased manner with Any payload.
-open class AnyNavigableViewController: UIViewController, NavigableViewController {
+final class AnyNavigableViewController: UIViewController, NavigableViewController {
     public typealias CompletionType = Any
     
     private let box: AnyNavigableViewControllerBox
@@ -50,7 +48,7 @@ open class AnyNavigableViewController: UIViewController, NavigableViewController
 
 extension AnyNavigableViewController {
     
-    override open var hash: Int {
+    override var hash: Int {
         wrapped.hash
     }
     

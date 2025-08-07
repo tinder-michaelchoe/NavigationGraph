@@ -56,7 +56,7 @@ class PhotosPickerViewController: UIViewController, NavigableViewController {
 
 extension PhotosPickerViewController: PHPickerViewControllerDelegate {
     func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
-        print("Did Finish PIcking: \(results)")
+        print("Did Finish Picking: \(results)")
         onComplete?(results)
     }
 }

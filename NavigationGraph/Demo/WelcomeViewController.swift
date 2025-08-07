@@ -22,6 +22,7 @@ final class WelcomeNode: NavNode, ViewControllerProviding {
 class WelcomeViewController: UIViewController, NavigableViewController {
 
     enum WelcomeResult {
+        case logo
         case next
         case signIn
     }
@@ -42,6 +43,14 @@ class WelcomeViewController: UIViewController, NavigableViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+
+        hostedView.rootView.viewState.$didPressLogo
+            .dropFirst()
+            .sink { [weak self] _ in
+                guard let self else { return }
+                onComplete?(.logo)
+            }
+            .store(in: &cancellables)
 
         hostedView.rootView.viewState.$didPressNext
             .dropFirst()
@@ -75,6 +84,7 @@ class WelcomeViewController: UIViewController, NavigableViewController {
 }
 
 class WelcomeViewState: ObservableObject {
+    @Published var didPressLogo: Int = 0
     @Published var didPressNext: Int = 0
     @Published var didPressSignIn: Int = 0
 }
@@ -99,10 +109,15 @@ struct WelcomeView: View {
                 Spacer()
 
                 // App Logo
-                Image("amora-logo") // Replace with actual asset name
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 250, height: 250)
+                Button {
+                    self.viewState.didPressLogo += 1
+                } label: {
+                    Image("amora-logo") // Replace with actual asset name
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 250, height: 250)
+                }
+
 
                 // Tagline
                 Text("Meet Travelers. Make Memories.")

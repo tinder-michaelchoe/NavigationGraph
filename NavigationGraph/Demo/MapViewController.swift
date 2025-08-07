@@ -84,10 +84,8 @@ struct MapView: View {
 
     @ObservedObject var viewState: MapViewState
 
-    // Los Angeles coordinates
     private let losAngeles = CLLocationCoordinate2D(latitude: 34.0906432, longitude: -118.3839645)
 
-    // Slider range from 5 km to 100 km
     @State private var distanceKm: Double = 25.0
 
     // Region state
@@ -132,9 +130,9 @@ struct MapView: View {
                     Text("100km")
                         .font(.caption)
                 }
-                .onChange(of: distanceKm) { newValue in
+                .onChange(of: distanceKm, initial: false, { _, newValue in
                     updateRegion(for: newValue)
-                }
+                })
             }
             .padding(.horizontal)
             Spacer()

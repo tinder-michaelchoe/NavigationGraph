@@ -137,7 +137,7 @@ struct GenderView: View {
                         .padding(.horizontal)
                     Spacer()
                     // Gender Prompt
-                    Text("I identify as")
+                    Text("Your gender")
                         .font(.headline)
                         .padding(.horizontal)
 
@@ -211,8 +211,6 @@ struct GenderView: View {
                 .background(Color(.systemBackground).ignoresSafeArea(edges: .bottom))
                 .padding(.bottom, 48)
             }
-            .navigationTitle("Tell us about yourself")
-            .navigationBarTitleDisplayMode(.inline)
         }
         .onChange(of: viewState.selectedGender) { _, _ in
             if viewState.selectedGender == "Beyond Binary" {

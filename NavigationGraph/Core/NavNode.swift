@@ -14,31 +14,21 @@
 /// Conforming types must provide a unique `id` that identifies them
 /// within the graph.
 public protocol NavNode: AnyObject {
-    /// The type of data required to instantiate or present this
-    /// destination.  This is analogous to the `@Serializable` route
-    /// classes used in Android's Navigation component.  Using an
-    /// associated type enforces that only data of this type can be
-    /// passed to the node.
+    /// The type of data required to instantiate or present this destination.
     associatedtype InputType
     
-    /// The type of data produced by this node upon completion.  This
-    /// allows downstream nodes to accept output from this node as input.
+    /// The type of data produced by this node upon completion.
     associatedtype OutputType
     
-    /// A unique identifier for the node.  Two nodes with the same
+    /// A unique identifier for the node. Two nodes with the same
     /// identifier are considered identical within the context of a
     /// single navigation graph.
     var id: String { get }
 }
 
-/// An internal class used to erase the generic type of a `NavNode` so
-/// that nodes of heterogeneous data types can be stored together in
-/// collections.  Instances of `AnyNavNode` wrap a concrete node and
-/// expose only the minimal information needed by the graph: the node's
-/// identifier and the runtime type of its associated input and output data.
-/// It also stores type‑checking closures used to validate data passed to
-/// transformation functions.
-public final class AnyNavNode {
+/// Used to erase the generic type of a `NavNode` so that nodes of heterogeneous data types can be stored together in collections.
+final class AnyNavNode {
+
     /// The node's unique identifier.
     let id: String
     
@@ -49,25 +39,23 @@ public final class AnyNavNode {
 
     /// If this node represents a nested subgraph, this wrapper holds
     /// the internal graph and the identifier of its start node.  It is
-    /// `nil` for regular screens.  Storing this directly on the node
+    /// `nil` for regular screens. Storing this directly on the node
     /// avoids the need for type casting at runtime when determining
     /// whether a node is a subgraph.
     public let subgraphWrapper: SubgraphWrapper?
 
     /// A simple wrapper used to capture the essential properties of a
     /// subgraph for runtime navigation.  It stores the nested graph
-    /// itself and the id of its start node.  See `NavSubgraph`
-    /// below for details.
+    /// itself and the id of its start node.
     public struct SubgraphWrapper {
-        /// The identifier of the subgraph.  This is the same value
-        /// returned by the underlying `NavSubgraph`'s `id` property.
+
+        /// The identifier of the subgraph.
         public let id: String
-        /// The nested navigation graph representing the flow inside
-        /// the subgraph.
+
+        /// The nested navigation graph representing the flow inside the subgraph.
         public let graph: NavigationGraph
-        /// The identifier of the start node within `graph`.  When
-        /// navigating into the subgraph, the controller begins with
-        /// this node.
+
+        /// The identifier of the start node within `graph`.
         public let startNodeId: String
     }
 
@@ -92,13 +80,14 @@ public final class AnyNavNode {
 extension AnyNavNode {
     var anyViewControllerProviding: AnyViewControllerProviding? {
         guard let viewControllerProviding = wrappedNode as? (any ViewControllerProviding) else {
-            fatalError("This node is not View Controller Providing")
+            fatalError("This node is not `ViewControllerProviding`")
         }
         return AnyViewControllerProviding(viewControllerProviding)
     }
 }
 
 extension AnyNavNode {
+
     /// Returns a fully qualified identifier describing this node's position within nested subgraphs.
     /// Format: [subgraphId1].[subgraphId2].<node id>
     public var fullyQualifiedId: String {
@@ -106,6 +95,7 @@ extension AnyNavNode {
             guard let subgraph = node?.subgraphWrapper else {
                 return ""
             }
+            
             // Recurse upward if the subgraph itself is wrapped in another subgraph node (linked by its graph's root node)
             // Assume the subgraph's graph contains a start node with its own AnyNavNode representation
             let rootNode = subgraph.graph.nodes[subgraph.startNodeId]

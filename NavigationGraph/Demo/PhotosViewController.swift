@@ -163,8 +163,6 @@ struct PhotosView: View {
                     .padding(.horizontal)
                     .padding(.bottom, 8)
             }
-            //.disabled(selectedIndices.count < 2) // enforce min photo selection
-            //.opacity(selectedIndices.count < 2 ? 0.5 : 1)
             .background(Color(.systemBackground).ignoresSafeArea(edges: .bottom))
             .padding(.bottom, 48)
         }

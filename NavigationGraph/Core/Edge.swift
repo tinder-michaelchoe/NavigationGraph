@@ -16,10 +16,7 @@
 /// return an instance of the destination's `InputType`.
 public struct Edge<From: NavNode, To: NavNode> {
     
-    /// A unique identifier for the edge.  This can be useful when
-    /// debugging or when multiple edges exist between the same pair
-    /// of nodes.  If you do not care about edge identities you can
-    /// leave this value as the default.
+    /// A unique identifier for the edge.
     public let id: String
     
     /// The source node of the edge.
@@ -36,7 +33,7 @@ public struct Edge<From: NavNode, To: NavNode> {
     /// node's output.  If `predicate` is nil, the edge is always
     /// considered eligible.  When a node completes, the
     /// navigation controller evaluates the predicates of all
-    /// outgoing edges and selects the first edge whose predicate
+    /// outgoing edges and selects the _first_ edge whose predicate
     /// returns `true`.
     public let predicate: ((From.OutputType) -> Bool)?
     
@@ -47,9 +44,7 @@ public struct Edge<From: NavNode, To: NavNode> {
     public let transform: (From.OutputType) -> To.InputType
 
     /// Creates a new edge between the specified nodes with the given
-    /// transition and data transformation.  The `id` parameter
-    /// defaults to a generated string combining the source and
-    /// destination identifiers but may be overridden for clarity.
+    /// transition and data transformation.
     public init(
         id: String? = nil,
         from: From,
@@ -94,8 +89,8 @@ public struct Edge<From: NavNode, To: NavNode> {
 /// `OutputType`.  This is by design: edge registration always performs
 /// compile‑time checks on the closure types, and runtime checks here
 /// guard against misconfiguration or misuse.
-public final class AnyNavEdge {
-    
+final class AnyNavEdge {
+
     /// The source node of the edge.
     let fromNode: AnyNavNode
     
@@ -168,24 +163,15 @@ public final class AnyNavEdge {
         }
         
         // Wrap the predicate to accept Any.  If no predicate is defined,
-        // default to true.  If a type mismatch occurs, try to bypass 
-        // type checking for simple predicates.
+        // default to true.
         self.predicateAny = { any in
-            if let pred = edge.predicate {
-                // First, try the normal type cast
-                if let typedInput = any as? From.OutputType {
-                    return pred(typedInput)
-                }
-                
-                // Type cast failed. This commonly happens with subgraph exits.
-                // For now, we'll assume predicates that can't be type-cast are
-                // simple "always true" predicates and return true.
-                // This is a temporary workaround for the subgraph type mismatch issue.
-                print("[NAV DEBUG]: Type cast failed for predicate, assuming it's type-agnostic")
-                return true
-            } else {
+            guard
+                let predicate = edge.predicate,
+                let typedInput = any as? From.OutputType
+            else {
                 return true
             }
+            return predicate(typedInput)
         }
     }
 

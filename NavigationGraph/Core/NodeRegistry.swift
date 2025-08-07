@@ -7,6 +7,11 @@ public final class NodeRegistry {
 
     public init() {}
 
+    public func hasNode<N: NavNode>(_ node: N) -> Bool {
+        let storageId = ObjectIdentifier(type(of: node))
+        return storage[storageId] != nil
+    }
+
     /// Register a node by its concrete type. If a node of the same type is already registered, it is replaced.
     public func register<N: NavNode>(_ node: N) {
         storage[ObjectIdentifier(type(of: node))] = AnyNavNode(node)
@@ -31,7 +36,7 @@ public final class NodeRegistry {
     }
 
     /// Returns all registered nodes and subgraphs as an array of AnyNavNode (for graph ingestion).
-    public var allNodes: [AnyNavNode] {
+    var allNodes: [AnyNavNode] {
         Array(storage.values)
     }
 }
