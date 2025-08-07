@@ -1,0 +1,161 @@
+# NavigationGraph Core Framework
+
+A type-safe, graph-based navigation system for iOS applications.
+
+## Overview
+
+The NavigationGraph Core framework provides the fundamental building blocks for creating sophisticated navigation flows in iOS applications. Built around graph theory principles, it enables developers to define navigation as a directed graph where nodes represent screens and edges represent transitions between them.
+
+## Key Concepts
+
+### Navigation Graph Architecture
+
+The framework is built on several core components that work together to provide a complete navigation solution:
+
+- **Navigation Graph**: The container that holds nodes and edges, providing pathfinding and navigation logic
+- **Navigation Nodes**: Represent destinations or screens in your application
+- **Edges**: Define transitions between nodes with type-safe data transformation
+- **Navigation Controller**: Manages UIKit integration and handles the navigation flow
+- **Node Registry**: Provides dependency injection and centralized node management
+
+### Type Safety
+
+One of the framework's key strengths is its compile-time type safety:
+
+- **Input/Output Types**: Each node defines what data it requires and what it produces
+- **Edge Transforms**: Functions that safely convert data between node types
+- **Predicate Validation**: Conditions that determine when edges can be taken
+
+## Core Types
+
+### Graph Management
+
+- ``NavigationGraph`` - The main container for nodes and edges
+- ``NavSubgraph`` - Enables nested navigation flows
+- ``NodeRegistry`` - Dependency injection container for nodes
+
+### Node Types
+
+- ``NavNode`` - Protocol that all navigation destinations must implement
+- ``ScreenNode`` - Concrete implementation for standard UI screens  
+- ``HeadlessNode`` - For data processing nodes without UI
+
+### Navigation Control
+
+- ``NavigationController`` - Manages UIKit navigation and handles user interactions
+- ``Edge`` - Defines transitions between nodes with predicates and transforms
+- ``TransitionType`` - Specifies animation types for navigation
+
+### View Controller Integration
+
+- ``NavigableViewController`` - Protocol for view controllers in the navigation system
+- ``ViewControllerProviding`` - Factory protocol for creating view controllers
+
+## Advanced Features
+
+### Subgraph Navigation
+
+The framework supports nested navigation flows through subgraphs, enabling:
+- Modular navigation components
+- Reusable flow patterns
+- Complex hierarchical navigation structures
+
+### Conditional Navigation
+
+Use predicates and multiple edges to create sophisticated branching logic:
+- User role-based routing
+- Feature flag integration
+- Dynamic flow adaptation
+
+### Testing Support
+
+Built-in testing utilities enable:
+- Dry-run navigation without UI
+- Path validation and verification
+- Graph analysis and diagnostics
+
+## Example Usage
+
+```swift
+// Create a navigation graph
+let graph = NavigationGraph()
+
+// Register nodes
+let welcomeNode = WelcomeNode()
+let profileNode = ProfileNode()
+graph.addNode(welcomeNode)
+graph.addNode(profileNode)
+
+// Define navigation edges
+graph.addEdge(Edge(
+    from: welcomeNode,
+    to: profileNode,
+    transition: .push,
+    predicate: { $0 == .viewProfile },
+    transform: { _ in currentUser }
+))
+
+// Set up navigation controller
+let navController = NavigationController(
+    graph: graph,
+    navigationController: UINavigationController()
+)
+
+// Start navigation
+navController.start(at: welcomeNode, with: ())
+```
+
+## Integration Patterns
+
+### Coordinator Pattern
+
+The framework works excellently with the Coordinator pattern:
+
+```swift
+class AppCoordinator {
+    private let navigationController: NavigationController
+    
+    init() {
+        let graph = createNavigationGraph()
+        self.navigationController = NavigationController(
+            graph: graph,
+            navigationController: UINavigationController()
+        )
+    }
+}
+```
+
+### Dependency Injection
+
+Use ``NodeRegistry`` for clean dependency management:
+
+```swift
+let registry = NodeRegistry()
+registry.register(WelcomeNode())
+registry.register(ProfileNode())
+
+let graph = NavigationGraph()
+graph.addNode(registry.resolve(WelcomeNode.self))
+graph.addNode(registry.resolve(ProfileNode.self))
+```
+
+## Performance Considerations
+
+- **Graph Construction**: Perform during app startup for optimal performance
+- **Node Resolution**: O(1) lookup through type-based registration
+- **Path Finding**: BFS algorithm with O(V + E) complexity
+- **Memory Management**: Weak references prevent retain cycles
+
+## Thread Safety
+
+The framework is designed for main-queue usage:
+- All navigation operations must occur on the main queue
+- Graph construction should happen during app initialization
+- Node registration is not thread-safe
+
+## See Also
+
+- <doc:NavigationGraph>
+- <doc:NavNode>
+- <doc:NavigationController>
+- <doc:Edge> 

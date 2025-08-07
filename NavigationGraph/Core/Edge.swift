@@ -5,46 +5,139 @@
 //  Created by mexicanpizza on 7/29/25.
 //
 
-/// A directed edge between two nodes in the navigation graph.  An
-/// edge encodes the type of transition used to navigate from the
-/// source (`from`) to the destination (`to`) and contains a
-/// transformation closure that maps the source's output type into the
-/// destination's input type.  The closure is responsible for
-/// preparing any data required by the destination based on the
-/// information available from the source's output.  For nodes whose
-/// `OutputType` is `Void`, simply ignore the input parameter and
-/// return an instance of the destination's `InputType`.
+/// A directed edge connecting two nodes in a navigation graph.
+///
+/// An edge defines how users can navigate from one screen to another, including
+/// the transition animation, conditional logic, and data transformation required.
+///
+/// ## Overview
+///
+/// Each edge encapsulates:
+/// - **Source and destination nodes**: Where navigation begins and ends
+/// - **Transition type**: How the navigation is presented (push, modal, etc.)
+/// - **Predicate**: Optional condition that must be met for this edge to be taken
+/// - **Transform**: Function to convert the source's output into the destination's input
+///
+/// ## Type Safety
+///
+/// Edges provide compile-time type safety by ensuring that:
+/// - The source node's `OutputType` matches the predicate parameter type
+/// - The transform function converts from `OutputType` to the destination's `InputType`
+/// - Data flows correctly between screens without runtime type errors
+///
+/// ## Example
+///
+/// ```swift
+/// let edge = Edge(
+///     from: welcomeNode,
+///     to: profileNode,
+///     transition: .push,
+///     predicate: { result in result == .viewProfile },
+///     transform: { _ in currentUser }
+/// )
+/// ```
+///
+/// ## Conditional Navigation
+///
+/// Use predicates to create branching navigation flows:
+///
+/// ```swift
+/// // Navigate to different screens based on user type
+/// graph.addEdge(Edge(
+///     from: loginNode,
+///     to: adminDashboard,
+///     transition: .push,
+///     predicate: { user in user.isAdmin }
+/// ))
+///
+/// graph.addEdge(Edge(
+///     from: loginNode,
+///     to: userDashboard,
+///     transition: .push,
+///     predicate: { user in !user.isAdmin }
+/// ))
+/// ```
 public struct Edge<From: NavNode, To: NavNode> {
     
-    /// A unique identifier for the edge.
+    /// A unique identifier for this edge.
+    ///
+    /// If not provided during initialization, defaults to "\(from.id)->\(to.id)".
     public let id: String
     
-    /// The source node of the edge.
+    /// The source node where navigation begins.
     public let from: From
     
-    /// The destination node of the edge.
+    /// The destination node where navigation ends.
     public let to: To
     
-    /// The transition used to navigate between nodes.
+    /// The transition animation used for this navigation.
+    ///
+    /// Common transitions include:
+    /// - `.push`: Standard navigation controller push
+    /// - `.modal`: Present modally
+    /// - `.pop`: Navigate backward
+    /// - `.dismiss`: Dismiss modal presentation
     public let transition: TransitionType
     
-    /// An optional predicate closure that determines whether this
-    /// edge is taken based on the data returned from the source
-    /// node's output.  If `predicate` is nil, the edge is always
-    /// considered eligible.  When a node completes, the
-    /// navigation controller evaluates the predicates of all
-    /// outgoing edges and selects the _first_ edge whose predicate
-    /// returns `true`.
+    /// An optional condition that determines when this edge can be taken.
+    ///
+    /// The predicate receives the source node's output data and returns `true`
+    /// if this edge should be followed. If `nil`, the edge is always eligible.
+    ///
+    /// When multiple edges exist from the same node, the navigation controller
+    /// evaluates predicates in order and takes the first edge that returns `true`.
+    ///
+    /// ## Example
+    ///
+    /// ```swift
+    /// predicate: { userInput in
+    ///     userInput.age >= 18
+    /// }
+    /// ```
     public let predicate: ((From.OutputType) -> Bool)?
     
-    /// A function which transforms the source node's `OutputType` into
-    /// the destination node's `InputType`.  This enables compile‑time
-    /// safety by ensuring that only valid data is passed when
-    /// navigating between two specific node types.
+    /// A function that transforms the source node's output into the destination's input.
+    ///
+    /// This transformation ensures type-safe data flow between screens. The function
+    /// receives the data produced by the source screen and must return data of the
+    /// type expected by the destination screen.
+    ///
+    /// ## Example
+    ///
+    /// ```swift
+    /// transform: { welcomeResult in
+    ///     switch welcomeResult {
+    ///     case .createAccount(let email):
+    ///         return RegistrationData(email: email)
+    ///     case .signIn:
+    ///         return LoginData()
+    ///     }
+    /// }
+    /// ```
     public let transform: (From.OutputType) -> To.InputType
 
-    /// Creates a new edge between the specified nodes with the given
-    /// transition and data transformation.
+    /// Creates a new navigation edge between two nodes.
+    ///
+    /// - Parameters:
+    ///   - id: Optional unique identifier. Defaults to "\(from.id)->\(to.id)"
+    ///   - from: The source node
+    ///   - to: The destination node
+    ///   - transition: The transition type for this navigation
+    ///   - predicate: Optional condition for taking this edge
+    ///   - transform: Function to convert source output to destination input
+    ///
+    /// ## Example
+    ///
+    /// ```swift
+    /// let edge = Edge(
+    ///     id: "welcome-to-profile",
+    ///     from: welcomeNode,
+    ///     to: profileNode,
+    ///     transition: .push,
+    ///     predicate: { $0 == .viewProfile },
+    ///     transform: { _ in currentUser }
+    /// )
+    /// ```
     public init(
         id: String? = nil,
         from: From,
@@ -61,6 +154,29 @@ public struct Edge<From: NavNode, To: NavNode> {
         self.transform = transform
     }
     
+    /// Creates a new navigation edge where the destination expects no input.
+    ///
+    /// This convenience initializer is used when the destination node's `InputType` is `Void`.
+    /// The transform function defaults to returning `()`.
+    ///
+    /// - Parameters:
+    ///   - id: Optional unique identifier. Defaults to "\(from.id)->\(to.id)"
+    ///   - from: The source node
+    ///   - to: The destination node (must have `InputType` of `Void`)
+    ///   - transition: The transition type for this navigation
+    ///   - predicate: Optional condition for taking this edge
+    ///   - transform: Optional transform function, defaults to returning `()`
+    ///
+    /// ## Example
+    ///
+    /// ```swift
+    /// let edge = Edge(
+    ///     from: profileNode,
+    ///     to: settingsNode, // SettingsNode.InputType is Void
+    ///     transition: .push,
+    ///     predicate: { $0 == .openSettings }
+    /// )
+    /// ```
     public init(
         id: String? = nil,
         from: From,
@@ -80,46 +196,69 @@ public struct Edge<From: NavNode, To: NavNode> {
 
 // MARK: - Type erasure wrappers
 
-/// An internal class used to erase the generic types of an `Edge` so
-/// that edges of heterogeneous source and destination types can be
-/// stored together. `AnyNavEdge` stores the nodes it connects, the
-/// transition type and a type‑checked transformation closure which
-/// converts arbitrary output data into arbitrary input data.  It will crash at
-/// runtime if the incoming data type does not match the source node's
-/// `OutputType`.  This is by design: edge registration always performs
-/// compile‑time checks on the closure types, and runtime checks here
-/// guard against misconfiguration or misuse.
+/// A type-erased wrapper for navigation edges.
+///
+/// `AnyNavEdge` enables storing edges with different generic types in the same collection.
+/// It preserves the edge's behavior while hiding the specific source and destination types.
+///
+/// ## Overview
+///
+/// The navigation graph uses `AnyNavEdge` internally to store heterogeneous edge types
+/// in the adjacency map. This type erasure is essential for the graph's flexibility
+/// while maintaining type safety through runtime checks.
+///
+/// ## Type Safety
+///
+/// Although type-erased, `AnyNavEdge` maintains type safety through:
+/// - Runtime type checking in predicate evaluation
+/// - Runtime type checking in data transformation
+/// - Graceful handling of type mismatches (especially for subgraph exits)
+///
+/// ## Error Handling
+///
+/// When type mismatches occur (commonly during subgraph navigation), the edge
+/// attempts to provide safe fallback behavior rather than crashing.
 final class AnyNavEdge {
 
-    /// The source node of the edge.
+    /// The source node of this edge.
     let fromNode: AnyNavNode
     
-    /// The destination node of the edge.
+    /// The destination node of this edge.
     let toNode: AnyNavNode
     
-    /// The transition used to navigate between nodes.
+    /// The transition type used for this navigation.
     let transition: TransitionType
     
-    /// A unique identifier for the edge.
+    /// The unique identifier for this edge.
     let id: String
     
-    /// A transformation closure which accepts and returns values of
-    /// type `Any`.  The closure performs runtime type checking and
-    /// will `fatalError` if called with the wrong source output data type.
+    /// A type-erased transformation function.
+    ///
+    /// This function accepts and returns values of type `Any`, performing runtime
+    /// type checking to ensure compatibility. If types don't match, it attempts
+    /// to provide safe fallback behavior.
     private let transformAny: (Any) -> Any
 
-    /// A predicate closure which accepts a value of type `Any` and
-    /// returns a boolean indicating whether this edge should be taken.
-    /// If the underlying `Edge` has no predicate, this closure always
-    /// returns `true`.  Runtime type checking is performed to ensure
-    /// the input matches the source node's `OutputType`.  A mismatch
-    /// results in `false` to indicate the edge is not eligible.
+    /// A type-erased predicate function.
+    ///
+    /// This function accepts a value of type `Any` and returns whether this edge
+    /// should be taken. If no predicate was defined or type checking fails,
+    /// it returns `true` to maintain navigation flow.
     let predicateAny: (Any) -> Bool
 
-    /// Creates an erased edge from a concrete `Edge`.  You must
-    /// provide the corresponding `AnyNavNode` instances for the
-    /// source and destination.  An assertion is thrown if the
-    /// provided nodes do not match the types of the edge.
+    /// Creates a type-erased edge from a concrete `Edge`.
+    ///
+    /// - Parameters:
+    ///   - edge: The concrete edge to wrap
+    ///   - fromNode: The type-erased source node
+    ///   - toNode: The type-erased destination node
+    /// - Precondition: The provided nodes must match the edge's source and destination
+    ///
+    /// ## Type Erasure Process
+    ///
+    /// This initializer wraps the edge's predicate and transform functions to work
+    /// with `Any` types while preserving their original behavior through runtime
+    /// type checking.
     public init<From: NavNode, To: NavNode>(
         _ edge: Edge<From, To>,
         from fromNode: AnyNavNode,
@@ -166,8 +305,8 @@ final class AnyNavEdge {
         // default to true.
         self.predicateAny = { any in
             guard
-                let predicate = edge.predicate,
-                let typedInput = any as? From.OutputType
+                    let predicate = edge.predicate,
+                    let typedInput = any as? From.OutputType
             else {
                 return true
             }
@@ -175,8 +314,15 @@ final class AnyNavEdge {
         }
     }
 
-    /// Invokes the transformation on the provided source data,
-    /// returning a value typed according to the destination node.
+    /// Applies the transformation function to the provided source data.
+    ///
+    /// - Parameter value: The output data from the source node
+    /// - Returns: The transformed data for the destination node
+    ///
+    /// ## Type Safety
+    ///
+    /// This method performs runtime type checking and attempts to provide
+    /// safe fallback behavior if type mismatches occur.
     func applyTransform(_ value: Any) -> Any {
         return transformAny(value)
     }

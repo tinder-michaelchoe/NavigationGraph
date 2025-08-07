@@ -23,20 +23,79 @@ Feature Ideas
 
 // MARK: - Navigation graph
 
-/// A `NavigationGraph` stores a collection of nodes and the edges connecting them.
+/// A directed graph that defines the navigation structure of an application.
+///
+/// `NavigationGraph` stores a collection of nodes representing screens or destinations,
+/// connected by edges that define how users can navigate between them. The graph uses
+/// an adjacency list representation for efficient pathfinding and navigation.
+///
+/// ## Overview
+///
+/// Each navigation graph maintains:
+/// - A registry of nodes indexed by their unique identifiers
+/// - An adjacency map defining outgoing edges from each node
+/// - Path-finding algorithms to determine valid navigation routes
+///
+/// ## Example
+///
+/// ```swift
+/// let graph = NavigationGraph()
+///
+/// // Add nodes
+/// graph.addNode(welcomeNode)
+/// graph.addNode(profileNode)
+/// graph.addNode(settingsNode)
+///
+/// // Define navigation edges
+/// graph.addEdge(Edge(
+///     from: welcomeNode,
+///     to: profileNode,
+///     transition: .push,
+///     transform: { _ in User(name: "Default") }
+/// ))
+/// ```
+///
+/// ## Subgraph Support
+///
+/// Navigation graphs support nested flows through subgraphs. A subgraph appears
+/// as a single node in the parent graph but contains its own internal navigation structure.
+///
+/// ## Thread Safety
+///
+/// NavigationGraph is not thread-safe. All operations should be performed on the main queue.
 public final class NavigationGraph {
 
-    /// A dictionary mapping node identifiers to their erased node wrappers.  Each entry must be unique.
+    /// A dictionary mapping node identifiers to their erased node wrappers.
+    ///
+    /// Each entry must be unique within the graph.
     var nodes: [String: AnyNavNode] = [:]
 
     /// An adjacency map from node identifiers to their outgoing edges.
+    ///
+    /// This representation enables efficient lookup of possible transitions
+    /// from any given node.
     var adjacency: [String: [AnyNavEdge]] = [:]
 
+    /// Creates a new, empty navigation graph.
     public init() {}
 
     // MARK: - Node registration
 
-    /// Adds a node to the graph.  If a node with the same id already exists, this method will replace it.
+    /// Adds a node to the graph.
+    ///
+    /// If a node with the same identifier already exists, this method will replace it
+    /// in debug builds and crash with a fatal error.
+    ///
+    /// - Parameter node: The node to add to the graph
+    /// - Returns: The graph instance for method chaining
+    ///
+    /// ## Example
+    ///
+    /// ```swift
+    /// graph.addNode(WelcomeNode())
+    ///      .addNode(ProfileNode())
+    ///      .addNode(SettingsNode())
+    /// ```
     @discardableResult
     public func addNode<N: NavNode>(_ node: N) -> Self {
         #if DEBUG
@@ -52,12 +111,30 @@ public final class NavigationGraph {
         return self
     }
 
-    /// Adds a subgraph as a node in this graph.  The subgraph is
-    /// represented as a single node whose `DataType` matches the
-    /// `DataType` of its start node. Once added, you can connect
-    /// edges to and from the subgraph just like any other node. To
-    /// navigate within the subgraph, call `findPath` on the
-    /// subgraph's internal `NavigationGraph`.
+    /// Adds a subgraph as a node in this graph.
+    ///
+    /// The subgraph appears as a single node whose `InputType` and `OutputType`
+    /// match those of its start node. Once added, you can connect edges to and from
+    /// the subgraph like any other node.
+    ///
+    /// - Parameter subgraph: The subgraph to add
+    /// - Returns: The graph instance for method chaining
+    ///
+    /// ## Navigation Within Subgraphs
+    ///
+    /// To navigate within the subgraph, call `findPath` on the subgraph's
+    /// internal `NavigationGraph`.
+    ///
+    /// ## Example
+    ///
+    /// ```swift
+    /// let signInSubgraph = NavSubgraph(
+    ///     id: "signIn",
+    ///     graph: signInGraph,
+    ///     start: signInHomeNode
+    /// )
+    /// graph.addSubgraph(signInSubgraph)
+    /// ```
     @discardableResult
     public func addSubgraph<Start: NavNode>(_ subgraph: NavSubgraph<Start>) -> Self {
         let wrapped = AnyNavNode(subgraph)
@@ -71,6 +148,25 @@ public final class NavigationGraph {
     // MARK: - Edge registration
 
     /// Adds a directed edge to the graph.
+    ///
+    /// Edges define how users can navigate between nodes, including the transition
+    /// type and any data transformation required.
+    ///
+    /// - Parameter edge: The edge to add
+    /// - Returns: The graph instance for method chaining
+    /// - Precondition: Both the source and destination nodes must already be registered in the graph
+    ///
+    /// ## Example
+    ///
+    /// ```swift
+    /// graph.addEdge(Edge(
+    ///     from: welcomeNode,
+    ///     to: profileNode,
+    ///     transition: .push,
+    ///     predicate: { $0 == .viewProfile },
+    ///     transform: { _ in currentUser }
+    /// ))
+    /// ```
     @discardableResult
     public func addEdge<From: NavNode, To: NavNode>(_ edge: Edge<From, To>) -> Self {
         guard let fromWrapped = nodes[edge.from.id] else {
@@ -89,21 +185,46 @@ public final class NavigationGraph {
 
     // MARK: Reachability and path finding
 
-    /// Returns a boolean indicating whether a path exists between the
-    /// specified source id and destination id nodes.
+    /// Determines whether a navigation path exists between two nodes.
+    ///
+    /// - Parameters:
+    ///   - sourceId: The identifier of the starting node
+    ///   - destinationId: The identifier of the target node
+    /// - Returns: `true` if a path exists, `false` otherwise
+    ///
+    /// ## Complexity
+    ///
+    /// This method uses breadth-first search, so the time complexity is O(V + E)
+    /// where V is the number of nodes and E is the number of edges.
     public func canNavigate(from sourceId: String, to destinationId: String) -> Bool {
         return findPath(from: sourceId, to: destinationId) != nil
     }
 
-    /// Generic overload that accepts node instances directly.
+    /// Determines whether a navigation path exists between two nodes.
+    ///
+    /// This is a convenience overload that accepts node instances directly.
+    ///
+    /// - Parameters:
+    ///   - source: The starting node
+    ///   - destination: The target node
+    /// - Returns: `true` if a path exists, `false` otherwise
     public func canNavigate<From: NavNode, To: NavNode>(from source: From, to destination: To) -> Bool {
         return canNavigate(from: source.id, to: destination.id)
     }
 
-    /// Finds a path from the node with id `sourceId` to the node
-    /// `destinationId` using breadth‑first search.
+    /// Finds a navigation path between two nodes using breadth-first search.
     ///
-    /// TODO [Michael] Add subgraph support
+    /// - Parameters:
+    ///   - sourceId: The identifier of the starting node
+    ///   - destinationId: The identifier of the target node
+    /// - Returns: An array of edges representing the path, or `nil` if no path exists
+    ///
+    /// ## Algorithm
+    ///
+    /// Uses breadth-first search to find the shortest path in terms of number of hops.
+    /// The algorithm guarantees finding the shortest path if one exists.
+    ///
+    /// - Todo: Add subgraph support for pathfinding across nested graphs
     func findPath(from sourceId: String, to destinationId: String) -> [AnyNavEdge]? {
         guard nodes[sourceId] != nil, nodes[destinationId] != nil else {
             return nil
@@ -128,22 +249,44 @@ public final class NavigationGraph {
         return nil
     }
 
-    /// Generic overload of `findPath` that accepts node instances directly.
+    /// Finds a navigation path between two nodes.
+    ///
+    /// This is a convenience overload that accepts node instances directly.
+    ///
+    /// - Parameters:
+    ///   - source: The starting node
+    ///   - destination: The target node
+    /// - Returns: An array of edges representing the path, or `nil` if no path exists
     func findPath<From: NavNode, To: NavNode>(from source: From, to destination: To) -> [AnyNavEdge]? {
         return findPath(from: source.id, to: destination.id)
     }
     
     // MARK: - Graph Helpers
     
+    /// Checks whether a specific node is registered in this graph.
+    ///
+    /// - Parameter node: The node to check for
+    /// - Returns: `true` if the node exists in the graph, `false` otherwise
     func hasNode<Node: NavNode>(_ node: Node) -> Bool {
         return nodes.contains(where: { $0.key == node.id })
     }
 
     // MARK: - Pretty printing
 
-    /// Returns a human‑readable description of the provided path.  Each
-    /// edge is formatted as `fromId --(transition)--> toId`.  If the
-    /// path is empty, an empty string is returned.
+    /// Returns a human-readable description of a navigation path.
+    ///
+    /// Each edge is formatted as `fromId --(transition)--> toId`.
+    ///
+    /// - Parameter path: The path to format
+    /// - Returns: A string representation of the path, or empty string if the path is empty
+    ///
+    /// ## Example Output
+    ///
+    /// ```
+    /// welcome --(push)--> profile
+    /// profile --(modal)--> settings
+    /// settings --(dismiss)--> profile
+    /// ```
     func prettyPrintPath(_ path: [AnyNavEdge]) -> String {
         guard !path.isEmpty else { return "" }
         return path.map { edge in
@@ -154,20 +297,45 @@ public final class NavigationGraph {
 
 // MARK: - Subgraphs
 
-/// A `NavSubgraph` encapsulates a nested navigation graph.  It
-/// conforms to `NavNode` so that the subgraph itself can act as a
-/// node in a parent graph.  The `InputType` of the subgraph is the
-/// same as the `InputType` of its start node, and the `OutputType` of
-/// the subgraph is the same as the `OutputType` of its start node.
+/// A navigation subgraph that can be embedded within a parent graph.
 ///
-/// TODO [Michael] Make the OutputType more flexible, i.e. not just the start node
+/// `NavSubgraph` encapsulates a nested navigation flow and conforms to `NavNode`
+/// so it can be treated as a single node in a parent graph. This enables building
+/// complex, hierarchical navigation structures.
+///
+/// ## Overview
+///
+/// The subgraph's `InputType` and `OutputType` are determined by its start node.
+/// When navigation enters the subgraph, it begins at the start node. When navigation
+/// exits the subgraph (no valid edges found), the parent graph resumes control.
+///
+/// ## Example
+///
+/// ```swift
+/// let signInFlow = NavigationGraph()
+/// signInFlow.addNode(signInHome)
+/// signInFlow.addNode(forgotPassword)
+/// signInFlow.addEdge(Edge(from: signInHome, to: forgotPassword, transition: .push))
+///
+/// let signInSubgraph = NavSubgraph(
+///     id: "signInFlow",
+///     graph: signInFlow,
+///     start: signInHome
+/// )
+///
+/// // Add to main graph
+/// mainGraph.addSubgraph(signInSubgraph)
+/// ```
+///
+/// - Todo: Make the OutputType more flexible, not just tied to the start node
 public final class NavSubgraph<Start: NavNode>: NavNode {
 
     public typealias InputType = Start.InputType
     public typealias OutputType = Start.OutputType
 
-    /// The identifier for the subgraph.  This identifier must be
-    /// unique within the parent graph.
+    /// The unique identifier for the subgraph.
+    ///
+    /// This identifier must be unique within the parent graph.
     public let id: String
 
     /// The internal navigation graph containing the nested flow.
@@ -176,6 +344,12 @@ public final class NavSubgraph<Start: NavNode>: NavNode {
     /// The identifier of the start node within the internal graph.
     public let startNodeId: String
 
+    /// Creates a new navigation subgraph.
+    ///
+    /// - Parameters:
+    ///   - id: A unique identifier for the subgraph
+    ///   - graph: The internal navigation graph
+    ///   - start: The starting node within the internal graph
     public init(id: String, graph: NavigationGraph, start: Start) {
         self.id = id
         self.graph = graph
@@ -183,18 +357,19 @@ public final class NavSubgraph<Start: NavNode>: NavNode {
     }
 }
 
-/// A protocol that abstracts over `NavSubgraph` without exposing its
-/// generic type.  It provides access to the nested graph and the
-/// start node identifier, enabling runtime operations on subgraphs
-/// without knowing their concrete `Start` type.  `NavSubgraph`
-/// conforms to this protocol; clients should not implement this
-/// protocol themselves.
+/// A protocol that abstracts over `NavSubgraph` without exposing generic types.
+///
+/// This protocol enables runtime operations on subgraphs without knowing their
+/// concrete `Start` type. `NavSubgraph` conforms to this protocol automatically.
+///
+/// - Important: Only `NavSubgraph` should conform to this protocol. Client code should not implement it.
 public protocol NavSubgraphProtocol {
-    /// The identifier of the subgraph.  Equivalent to `id` on
-    /// `NavSubgraph`.
+    /// The identifier of the subgraph.
     var id: String { get }
+    
     /// The nested navigation graph associated with the subgraph.
     var graph: NavigationGraph { get }
+    
     /// The identifier of the start node within the nested graph.
     var startNodeId: String { get }
 }
@@ -204,24 +379,66 @@ extension NavSubgraph: NavSubgraphProtocol {}
 #if DEBUG
 // MARK: - Testability Helpers and Graph Validation
 
-/// Represents a step taken during a test navigation dry run.
+/// Represents a single step in a navigation dry run.
+///
+/// A navigation step captures the transition from one node to another,
+/// including the data flow and transition type used.
 public struct NavigationStep {
+    /// The identifier of the source node.
     public let from: String
+    
+    /// The identifier of the destination node.
     public let to: String
+    
+    /// The transition type used for this navigation step.
     public let transition: TransitionType
+    
+    /// The output data from the source node.
     public let output: Any
+    
+    /// The input data provided to the destination node.
     public let input: Any
 }
 
 public extension NavigationGraph {
+    /// Errors that can occur during graph operations.
     enum GraphError: Error {
+        /// A general error with a descriptive message.
         case error(message: String)
     }
 }
 
 public extension NavigationGraph {
-    /// Simulate navigation from a start node, feeding outputs for each step.
-    /// Returns the path traversed, or an error if navigation gets stuck.
+    /// Simulates navigation through the graph without presenting UI.
+    ///
+    /// This method is invaluable for testing navigation flows, validating graph
+    /// structure, and debugging complex navigation scenarios.
+    ///
+    /// - Parameters:
+    ///   - startId: The identifier of the starting node
+    ///   - initialInput: The initial input data for the start node
+    ///   - outputProvider: A closure that provides output data for each node
+    ///   - stopAt: An optional predicate to stop simulation at specific nodes
+    ///   - maxHops: Maximum number of navigation steps to prevent infinite loops
+    /// - Returns: An array of navigation steps taken during the simulation
+    /// - Throws: `GraphError.error` if navigation gets stuck or exceeds maximum hops
+    ///
+    /// ## Example
+    ///
+    /// ```swift
+    /// let steps = try graph.dryRun(
+    ///     from: "welcome",
+    ///     initialInput: (),
+    ///     outputProvider: { nodeId, input in
+    ///         switch nodeId {
+    ///         case "profile": return ProfileResult.save
+    ///         case "settings": return SettingsResult.done
+    ///         default: return ()
+    ///         }
+    ///     },
+    ///     stopAt: { $0 == "end" }
+    /// )
+    /// ```
     func dryRun(
         from startId: String,
         initialInput: Any,
@@ -256,7 +473,27 @@ public extension NavigationGraph {
         return steps
     }
 
-    /// Asserts that a path exists and matches the expected sequence.
+    /// Validates that a path exists between two nodes with expected transitions.
+    ///
+    /// This method is useful for testing that specific navigation flows are properly
+    /// configured in your graph.
+    ///
+    /// - Parameters:
+    ///   - startId: The identifier of the starting node
+    ///   - endId: The identifier of the ending node
+    ///   - expectedTransitions: Optional array of expected transition types
+    /// - Returns: An array of node identifiers in the path
+    /// - Throws: `GraphError.error` if no path exists or transitions don't match expectations
+    ///
+    /// ## Example
+    ///
+    /// ```swift
+    /// let path = try graph.assertPath(
+    ///     from: "welcome",
+    ///     to: "settings",
+    ///     expectedTransitions: [.push, .modal]
+    /// )
+    /// ```
     func assertPath(
         from startId: String,
         to endId: String,
@@ -274,7 +511,20 @@ public extension NavigationGraph {
         return path.map { $0.toNode.id }
     }
 
-    /// Returns a set of node IDs that cannot be reached from any other node.
+    /// Identifies nodes that cannot be reached from any other node.
+    ///
+    /// Unreachable nodes might indicate configuration errors in your navigation graph.
+    ///
+    /// - Returns: A set of node identifiers that are unreachable
+    ///
+    /// ## Example
+    ///
+    /// ```swift
+    /// let unreachable = graph.unreachableNodes()
+    /// if !unreachable.isEmpty {
+    ///     print("Warning: Unreachable nodes found: \(unreachable)")
+    /// }
+    /// ```
     func unreachableNodes() -> Set<String> {
         var reachable = Set<String>()
         for (_, edges) in adjacency {
@@ -285,7 +535,17 @@ public extension NavigationGraph {
         return Set(nodes.keys).subtracting(reachable)
     }
 
-    /// Detect cycles in the graph (useful if cycles are prohibited).
+    /// Detects whether the graph contains any cycles.
+    ///
+    /// Cycles in navigation graphs may or may not be desirable, depending on your
+    /// application's requirements. This method helps identify them for analysis.
+    ///
+    /// - Returns: `true` if the graph contains at least one cycle, `false` otherwise
+    ///
+    /// ## Algorithm
+    ///
+    /// Uses depth-first search with a recursion stack to detect back edges,
+    /// which indicate the presence of cycles.
     func containsCycle() -> Bool {
         var visited = Set<String>()
         var stack = Set<String>()
@@ -310,8 +570,13 @@ public extension NavigationGraph {
         return false
     }
 
-    /// Validate edge type compatibility (stub for future expansion).
-    /// Here as a placeholder, as runtime type information with `Any` is limited.
+    /// Validates edge type compatibility across the graph.
+    ///
+    /// This is a placeholder for future type validation functionality.
+    /// Currently returns an empty array due to Swift's type erasure limitations with `Any`.
+    ///
+    /// - Returns: An array of validation error messages
+    /// - Note: This method is not fully implemented due to runtime type information limitations
     func validateEdgeTypes() -> [String] {
         // Not implemented due to Swift's type erasure with Any—could expand with custom test values or code generation.
         return []
@@ -319,7 +584,26 @@ public extension NavigationGraph {
 }
 
 extension NavigationGraph {
-    /// Pretty-prints the graph starting from the given node, including subgraphs.
+    /// Generates a visual representation of the graph structure.
+    ///
+    /// This method creates a tree-like outline showing the navigation structure,
+    /// including subgraphs and their internal organization.
+    ///
+    /// - Parameter rootId: The identifier of the node to use as the root of the outline
+    /// - Returns: A formatted string showing the graph structure
+    ///
+    /// ## Example Output
+    ///
+    /// ```
+    /// └─ welcome
+    ///    ├─ signInSubgraph
+    ///    │  ┌─ [Subgraph: signInSubgraph]
+    ///    │  │  ├─ SignInHomeNode
+    ///    │  │  │  └─ ForgotPasswordNode
+    ///    │  │  └──────────────
+    ///    └─ profile
+    ///       └─ settings
+    /// ```
     public func prettyPrintOutline(from rootId: String) -> String {
         guard nodes[rootId] != nil else { return "Root node \(rootId) not found." }
 

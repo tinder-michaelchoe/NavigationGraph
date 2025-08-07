@@ -7,37 +7,89 @@
 
 import UIKit
 
-/// A `NavigationController` coordinates navigation through a
-/// `NavigationGraph` using an event‑driven approach.  Instead of
-/// awaiting each screen asynchronously, the controller presents
-/// view controllers, listens for completion callbacks and responds
-/// to back/presentation events to maintain its own stack of nodes.
-/// This design allows users to freely navigate forward and backward
-/// (using the navigation bar's back button or swipe gestures)
-/// without crashing due to pending continuations.  It also
-/// supports nested subgraphs by switching between graphs based on
-/// the current node.
+/// A controller that manages navigation through a `NavigationGraph` using an event-driven approach.
+///
+/// `NavigationController` coordinates navigation between screens by presenting view controllers,
+/// listening for completion callbacks, and responding to user navigation actions like back button
+/// taps or swipe gestures. This design allows for natural user interaction without blocking
+/// navigation flows.
+///
+/// ## Overview
+///
+/// Unlike traditional async-await navigation patterns, `NavigationController` uses an event-driven
+/// architecture that:
+/// - Maintains its own stack of visited nodes
+/// - Supports subgraph navigation with automatic context switching
+/// - Handles both forward and backward navigation seamlessly
+/// - Provides comprehensive logging for debugging navigation flows
+///
+/// ## Key Features
+///
+/// - **Non-blocking navigation**: Users can navigate back freely without crashing pending operations
+/// - **Subgraph support**: Automatic handling of nested navigation flows
+/// - **Multiple transition types**: Push, modal, pop, and custom transitions
+/// - **Debug logging**: Detailed console output for tracking navigation state
+/// - **UIKit integration**: Works seamlessly with `UINavigationController`
+///
+/// ## Example Usage
+///
+/// ```swift
+/// let navController = NavigationController(
+///     graph: navigationGraph,
+///     navigationController: UINavigationController()
+/// )
+///
+/// // Start navigation at the welcome screen
+/// navController.start(at: WelcomeNode(), with: ())
+/// ```
+///
+/// ## Navigation Flow
+///
+/// 1. **Start**: Begin navigation at a specific node with initial data
+/// 2. **Present**: Show view controller for current node
+/// 3. **Complete**: View controller calls completion handler with output data
+/// 4. **Evaluate**: Find eligible edges based on output and predicates
+/// 5. **Navigate**: Move to next node or exit subgraph if no edges found
+///
+/// ## Thread Safety
+///
+/// NavigationController should only be used on the main queue. All navigation operations
+/// involve UIKit components that require main thread access.
 public final class NavigationController: NSObject {
 
-    // Item used to track the current node in the nodeStack.
+    /// Internal representation of a node in the navigation stack.
+    ///
+    /// Each stack item captures the complete context needed to understand
+    /// the current navigation state and handle transitions.
     private struct StackItem {
+        /// The navigation node being presented.
         let node: AnyNavNode
+        
+        /// The input data provided to this node.
         let data: Any
+        
+        /// The graph context used for resolving edges from this node.
         let graph: NavigationGraph
+        
+        /// The transition type used to present this node.
         let incomingTransition: TransitionType
     }
     
-    /// The top‑level navigation graph describing the flow.
+    /// The top-level navigation graph describing the application flow.
     private let graph: NavigationGraph
     
     /// The UIKit navigation controller used to present view controllers.
     private let navigationController: UINavigationController
     
-    /// A stack of visited nodes along with their input data, the
-    /// graph used to resolve outgoing edges for that node and the
-    /// transition used to present that node.  The last element
-    /// represents the current screen.  When a view controller is
-    /// popped, the corresponding entry is removed from this stack.
+    /// A stack of visited nodes with their associated context.
+    ///
+    /// The last element represents the current screen. When a view controller
+    /// is popped, the corresponding entry is removed from this stack.
+    ///
+    /// ## Debug Output
+    ///
+    /// Changes to this stack automatically trigger console logging showing
+    /// the current navigation path.
     private var nodeStack: [StackItem] = [] {
         didSet {
             print("""
@@ -48,10 +100,16 @@ public final class NavigationController: NSObject {
         }
     }
     
-    /// A stack tracking which subgraphs we're currently nested in.
-    /// When entering a subgraph, we push the subgraph node onto this stack.
-    /// When exiting (no edges found), we can look at this stack to find
-    /// the correct parent context for edge resolution.
+    /// A stack tracking nested subgraph contexts.
+    ///
+    /// When entering a subgraph, the subgraph node is pushed onto this stack.
+    /// When exiting (no eligible edges found), this stack helps determine
+    /// the correct parent context for continued navigation.
+    ///
+    /// ## Debug Output
+    ///
+    /// Changes to this stack automatically trigger console logging showing
+    /// the current subgraph nesting.
     private var subgraphStack: [AnyNavNode] = [] {
         didSet {
             print("""
@@ -61,9 +119,22 @@ public final class NavigationController: NSObject {
         }
     }
 
-    /// A mapping from view controller hashes to the nodes they represent.
+    /// Maps view controller instances to their corresponding navigation nodes.
+    ///
+    /// This mapping enables looking up the node associated with a view controller
+    /// when handling completion callbacks or navigation delegate events.
     private var anyViewControllerToNode: [Int: AnyNavNode] = [:]
 
+    /// Creates a new navigation controller with the specified graph and UIKit controller.
+    ///
+    /// - Parameters:
+    ///   - graph: The navigation graph defining the application flow
+    ///   - navigationController: The UIKit navigation controller for presenting screens
+    ///
+    /// ## Setup
+    ///
+    /// The initializer automatically configures the navigation controller as a delegate
+    /// to handle navigation events like back button taps and swipe gestures.
     public init(
         graph: NavigationGraph,
         navigationController: UINavigationController
@@ -75,8 +146,22 @@ public final class NavigationController: NSObject {
         self.navigationController.delegate = self
     }
 
-    /// Starts navigating from the specified node using the provided
-    /// initial data.
+    /// Begins navigation at the specified node with the provided initial data.
+    ///
+    /// - Parameters:
+    ///   - start: The starting navigation node
+    ///   - data: The initial input data for the starting node
+    ///
+    /// ## Example
+    ///
+    /// ```swift
+    /// navController.start(at: WelcomeNode(), with: ())
+    /// ```
+    ///
+    /// ## Preconditions
+    ///
+    /// The starting node must be registered in the navigation graph, otherwise
+    /// the method will crash with a fatal error.
     public func start<Start: NavNode>(at start: Start, with data: Start.InputType) {
         guard let wrapped = graph.nodes[start.id] else {
             fatalError("Starting node \(start.id) is not registered in the graph")
@@ -89,11 +174,30 @@ public final class NavigationController: NSObject {
         show(node: wrapped, data: data, incomingTransition: .push, graph: graph)
     }
 
-    /// Presents a node on screen using the provided data, transition
-    /// and graph.  This method pushes the node onto the internal
-    /// stack, creates a view controller via the factory, sets up its
-    /// completion callback and presents it using the appropriate
-    /// transition.
+    /// Presents a node on screen with the specified data and transition.
+    ///
+    /// This method handles both regular nodes and subgraphs, automatically
+    /// switching context when entering nested navigation flows.
+    ///
+    /// - Parameters:
+    ///   - node: The node to present
+    ///   - data: The input data for the node
+    ///   - incomingTransition: The transition type to use
+    ///   - currentGraph: The graph context for resolving edges
+    ///
+    /// ## Subgraph Handling
+    ///
+    /// When the node represents a subgraph:
+    /// 1. The subgraph is pushed onto the subgraph stack
+    /// 2. Navigation switches to the subgraph's internal graph
+    /// 3. The subgraph's start node is presented
+    ///
+    /// ## View Controller Creation
+    ///
+    /// For regular nodes:
+    /// 1. Creates a view controller using the node's factory
+    /// 2. Sets up completion callback handling
+    /// 3. Presents using the specified transition type
     private func show(
         node: AnyNavNode,
         data: Any,
@@ -188,11 +292,33 @@ public final class NavigationController: NSObject {
         }
     }
 
-    /// Handles completion of a view controller.  It looks up the
-    /// corresponding node, determines the next edge to follow (if any)
-    /// and presents the next node.  If there are no outgoing edges,
-    /// this method simply returns, leaving the user on the current
-    /// screen.
+    /// Handles completion of a view controller by finding the next navigation step.
+    ///
+    /// This method is called when a view controller invokes its completion handler.
+    /// It evaluates outgoing edges from the current node and navigates to the next
+    /// destination if an eligible edge is found.
+    ///
+    /// - Parameters:
+    ///   - view: The view controller that completed
+    ///   - output: The output data from the view controller
+    ///
+    /// ## Edge Evaluation Process
+    ///
+    /// 1. **Find outgoing edges**: Look up edges from the current node
+    /// 2. **Filter by predicate**: Test each edge's predicate against the output data
+    /// 3. **Choose first match**: Select the first edge whose predicate returns true
+    /// 4. **Transform data**: Apply the edge's transform to prepare data for the destination
+    /// 5. **Navigate**: Present the destination node with the transformed data
+    ///
+    /// ## Subgraph Exit Handling
+    ///
+    /// If no eligible edges are found in the current graph context, the method
+    /// attempts to exit nested subgraphs and continue navigation in parent contexts.
+    ///
+    /// ## Modal Dismissal
+    ///
+    /// If the current view controller was presented modally, it's dismissed before
+    /// presenting the next screen to avoid UIKit presentation conflicts.
     private func handleCompletion(from view: UIViewController, output: Any) {
         guard
             let navigableViewController = view as? any NavigableViewController,
@@ -262,9 +388,30 @@ public final class NavigationController: NSObject {
 
     }
     
-    /// Attempts to exit the current subgraph and find an edge in a parent subgraph.
-    /// Uses the subgraph stack to recursively check parent contexts until an edge is found.
-    /// Returns true if navigation occurred, false if no valid exit was found.
+    /// Attempts to exit the current subgraph and find navigation options in parent contexts.
+    ///
+    /// This method is called when no eligible edges are found in the current graph context.
+    /// It recursively checks parent subgraphs to find valid navigation paths.
+    ///
+    /// - Parameters:
+    ///   - node: The current node with no outgoing edges
+    ///   - output: The output data from the current node
+    ///   - view: The current view controller
+    /// - Returns: `true` if navigation occurred, `false` if no valid exit was found
+    ///
+    /// ## Algorithm
+    ///
+    /// 1. **Check subgraph stack**: Verify there are subgraphs to exit
+    /// 2. **Iterate parent contexts**: Try each subgraph level from innermost to outermost
+    /// 3. **Find parent graph**: Determine the correct graph for edge resolution
+    /// 4. **Evaluate edges**: Look for eligible edges from the subgraph node
+    /// 5. **Navigate or continue**: Either navigate to a destination or try the next level
+    ///
+    /// ## Type Safety Note
+    ///
+    /// When exiting subgraphs, there can be type mismatches between the exiting node's
+    /// output type and the subgraph's expected output type. The method handles this
+    /// gracefully by passing the original output data.
     private func tryExitSubgraph(for node: AnyNavNode, with output: Any, from view: UIViewController) -> Bool {
         guard !subgraphStack.isEmpty else {
             print("[NAV DEBUG]: No subgraphs in stack, cannot exit")
@@ -320,9 +467,15 @@ public final class NavigationController: NSObject {
         return false
     }
     
-    /// Finds the correct parent graph for a subgraph at the given index in the subgraph stack.
+    /// Determines the correct parent graph for a subgraph at a given nesting level.
+    ///
     /// - Parameter index: The index in the subgraph stack (0 = outermost, count-1 = innermost)
     /// - Returns: The graph that contains edges from the subgraph at this level
+    ///
+    /// ## Graph Resolution Logic
+    ///
+    /// - **Outermost subgraph**: Parent is always the main navigation graph
+    /// - **Nested subgraphs**: Parent is the internal graph of the subgraph one level up
     private func findParentGraphForSubgraph(at index: Int) -> NavigationGraph {
         print("[NAV DEBUG]: Finding parent graph for subgraph at index \(index)")
         if index == 0 {
@@ -341,7 +494,18 @@ public final class NavigationController: NSObject {
         }
     }
     
-    /// Finds an eligible edge for a node with given output in the specified graph
+    /// Finds an eligible edge for a node with given output data in the specified graph.
+    ///
+    /// - Parameters:
+    ///   - node: The node to find edges for
+    ///   - output: The output data to test against edge predicates
+    ///   - graph: The graph to search for edges
+    /// - Returns: The first eligible edge, or `nil` if none found
+    ///
+    /// ## Debug Output
+    ///
+    /// This method provides extensive debug logging to help track edge evaluation,
+    /// including predicate results and type information.
     private func findEligibleEdge(for node: AnyNavNode, with output: Any, in graph: NavigationGraph) -> AnyNavEdge? {
         let edges = graph.adjacency[node.id] ?? []
         print("[NAV DEBUG]: Checking \(edges.count) edges for node \(node.id)")
@@ -367,7 +531,12 @@ public final class NavigationController: NSObject {
         return candidates.first
     }
     
-    /// Handles removal of nodes that have been popped or dismissed.
+    /// Handles cleanup when nodes are removed from the navigation stack.
+    ///
+    /// This method is called when view controllers are popped or dismissed,
+    /// ensuring that internal state remains consistent with the UIKit navigation stack.
+    ///
+    /// - Parameter view: The view controller that was removed
     private func handlePop(for view: UIViewController) {
         guard
             let navigableViewController = view as? any NavigableViewController,
@@ -386,8 +555,21 @@ public final class NavigationController: NSObject {
 
 // MARK: - UINavigationControllerDelegate
 
-// Removed duplicate UINavigationControllerDelegate extension
+/// Extension conforming to `UINavigationControllerDelegate` to handle navigation events.
+///
+/// This delegate implementation detects when view controllers are popped by comparing
+/// the transition coordinator's `fromVC` with the current navigation stack.
 extension NavigationController: UINavigationControllerDelegate {
+    
+    /// Called when the navigation controller shows a new view controller.
+    ///
+    /// This method detects pop operations by checking if the previous view controller
+    /// is no longer in the navigation stack.
+    ///
+    /// - Parameters:
+    ///   - navController: The navigation controller
+    ///   - viewController: The newly displayed view controller
+    ///   - animated: Whether the transition was animated
     public func navigationController(
         _ navController: UINavigationController,
         didShow viewController: UIViewController,
@@ -407,9 +589,18 @@ extension NavigationController: UINavigationControllerDelegate {
 
 // MARK: - UIAdaptivePresentationControllerDelegate
 
+/// Extension conforming to `UIAdaptivePresentationControllerDelegate` to handle modal dismissal.
+///
+/// This delegate implementation detects when modals are dismissed interactively
+/// (such as by swiping down) and updates the navigation state accordingly.
 extension NavigationController: UIAdaptivePresentationControllerDelegate {
 
-    // When a modal is dismissed interactively (e.g. by swiping down), treat it as a pop and update the stack.
+    /// Called when a modal presentation is dismissed interactively.
+    ///
+    /// This method treats interactive dismissal as equivalent to a pop operation,
+    /// ensuring that the navigation state remains consistent.
+    ///
+    /// - Parameter presentationController: The presentation controller that was dismissed
     public func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
         let dismissedVC = presentationController.presentedViewController
         handlePop(for: dismissedVC)

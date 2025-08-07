@@ -7,13 +7,11 @@ A powerful, type-safe navigation framework for iOS applications that uses graph-
 - [Features](#features)
 - [Architecture Overview](#architecture-overview)
 - [Requirements](#requirements)
-- [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Core Concepts](#core-concepts)
 - [Advanced Features](#advanced-features)
 - [Examples](#examples)
 - [Testing](#testing)
-- [Contributing](#contributing)
 
 ## Features
 
@@ -59,22 +57,6 @@ Edges define:
 - iOS 18.0+
 - Xcode 16.0+
 - Swift 6.0+
-
-## Installation
-
-### Manual Installation
-
-1. Clone this repository
-2. Drag the `NavigationGraph` folder into your Xcode project
-3. Ensure the files are added to your target
-
-### Swift Package Manager (Future)
-
-```swift
-dependencies: [
-    .package(url: "https://github.com/your-username/NavigationGraph.git", from: "1.0.0")
-]
-```
 
 ## Quick Start
 
@@ -423,14 +405,6 @@ NavigationGraph outline from welcome:
 - `NavigationController.start(at:with:)`: Begin navigation
 - `NodeRegistry.register(_:)`: Register node for DI
 
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Add tests for your changes
-4. Ensure all tests pass
-5. Submit a pull request
-
 ## Future Enhancements
 
 The codebase includes TODO comments for potential improvements:
@@ -441,11 +415,3 @@ The codebase includes TODO comments for potential improvements:
 - SwiftUI integration
 - Enhanced DSL for graph definition
 - Priority-based edge selection
-
-## License
-
-[Add your license information here]
-
-## Support
-
-[Add support/contact information here] 
