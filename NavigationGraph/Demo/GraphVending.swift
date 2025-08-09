@@ -512,6 +512,13 @@ struct DemoGraphVariant1: GraphVending {
             }
         ))
 
+        mapToPhotosGraph.addEdge(Edge(
+            from: photoSelectorSubgraph,
+            to: voidToVoidExit,
+            transition: .none,
+            predicate: { _ in true }
+        ))
+
         let mapToPhotosSubgraph = NavSubgraph(
             id: "mapToPhotos",
             graph: mapToPhotosGraph,
