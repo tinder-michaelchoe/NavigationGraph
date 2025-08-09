@@ -53,7 +53,7 @@ class GenderViewController: UIViewController, NavigableViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
 
-        hostedView.rootView.viewState.$didPressBeyondBinary
+        viewState.$didPressBeyondBinary
             .dropFirst()
             .sink { [weak self] _ in
                 guard let self else { return }
@@ -61,7 +61,7 @@ class GenderViewController: UIViewController, NavigableViewController {
             }
             .store(in: &cancellables)
 
-        hostedView.rootView.viewState.$didPressNext
+        viewState.$didPressNext
             .dropFirst()
             .sink { [weak self] _ in
                 guard let self else { return }
@@ -73,7 +73,7 @@ class GenderViewController: UIViewController, NavigableViewController {
             }
             .store(in: &cancellables)
 
-        hostedView.rootView.viewState.$didPressLearnMore
+        viewState.$didPressLearnMore
             .dropFirst()
             .sink { [weak self] _ in
                 guard let self else { return }

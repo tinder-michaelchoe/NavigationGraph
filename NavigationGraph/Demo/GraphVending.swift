@@ -14,7 +14,7 @@ protocol GraphVending {
 ///
 /// START -> [SignIn Home] -> END
 ///                       \
-///                        [Forgot Password] -> [Email Sent Alert]
+///                        [Forgot Password] -> [Email Sent Alert] -|
 ///
 struct SignInGraph: GraphVending {
 
@@ -219,6 +219,8 @@ struct DemoGraphVariant1: GraphVending {
         let map = registry.resolve(MapNode.self)
         let end = registry.resolve(EndNode.self)
 
+        let voidToVoidExit = registry.resolve(HeadlessNode<Void, Void>.self)
+
         let graph = NavigationGraph()
 
         graph.addNode(registry.resolve(WelcomeNode.self))
@@ -230,6 +232,7 @@ struct DemoGraphVariant1: GraphVending {
         signinGraph.addNode(signinHome)
         signinGraph.addNode(forgotPassword)
         signinGraph.addNode(oneShotErrorNode)
+        signinGraph.addNode(voidToVoidExit)
 
         signinGraph.addEdge(Edge(
             from: signinHome,
@@ -252,6 +255,13 @@ struct DemoGraphVariant1: GraphVending {
         ))
 
         signinGraph.addEdge(Edge(
+            from: signinHome,
+            to: voidToVoidExit,
+            transition: .none,
+            predicate: { _ in true }
+        ))
+
+        signinGraph.addEdge(Edge(
             from: forgotPassword,
             to: oneShotErrorNode,
             transition: .modal,
@@ -271,7 +281,12 @@ struct DemoGraphVariant1: GraphVending {
             }
         ))
 
-        let signInSubgraph = NavSubgraph(id: "signInSubgraph", graph: signinGraph, start: signinHome)
+        let signInSubgraph = NavSubgraph(
+            id: "signInSubgraph",
+            graph: signinGraph,
+            entry: signinHome,
+            exit: voidToVoidExit
+        )
         graph.addSubgraph(signInSubgraph)
 
         graph.addEdge(Edge(
@@ -361,7 +376,6 @@ struct DemoGraphVariant1: GraphVending {
             }
         ))
 
-
         graph.addNode(genderLearnMore)
 
         graph.addEdge(Edge(
@@ -378,6 +392,7 @@ struct DemoGraphVariant1: GraphVending {
         let photoSelectorGraph = NavigationGraph()
         photoSelectorGraph.addNode(photos)
         photoSelectorGraph.addNode(photosSelector)
+        photoSelectorGraph.addNode(voidToVoidExit)
 
         photoSelectorGraph.addEdge(Edge(
             from: photos,
@@ -397,12 +412,25 @@ struct DemoGraphVariant1: GraphVending {
             }
         ))
 
-        let photoSelectorSubgraph = NavSubgraph(id: "photoSelector", graph: photoSelectorGraph, start: photos)
+        photoSelectorGraph.addEdge(Edge(
+            from: photos,
+            to: voidToVoidExit,
+            transition: .none,
+            predicate: { _ in true }
+        ))
+
+        let photoSelectorSubgraph = NavSubgraph(
+            id: "photoSelector",
+            graph: photoSelectorGraph,
+            entry: photos,
+            exit: voidToVoidExit
+        )
 
         // MARK: - Photo to Map Subgraph
 
         let photosToMapGraph = NavigationGraph()
         photosToMapGraph.addNode(map)
+        photosToMapGraph.addNode(voidToVoidExit)
         photosToMapGraph.addSubgraph(photoSelectorSubgraph)
 
         photosToMapGraph.addEdge(Edge(
@@ -414,7 +442,19 @@ struct DemoGraphVariant1: GraphVending {
             }
         ))
 
-        let photosToMapSubgraph = NavSubgraph(id: "photosToMap", graph: photosToMapGraph, start: photoSelectorSubgraph)
+        photosToMapGraph.addEdge(Edge(
+            from: map,
+            to: voidToVoidExit,
+            transition: .none,
+            predicate: { _ in true }
+        ))
+
+        let photosToMapSubgraph = NavSubgraph(
+            id: "photosToMap",
+            graph: photosToMapGraph,
+            entry: photoSelectorSubgraph,
+            exit: voidToVoidExit
+        )
         graph.addSubgraph(photosToMapSubgraph)
 
         graph.addEdge(Edge(
@@ -460,6 +500,7 @@ struct DemoGraphVariant1: GraphVending {
 
         let mapToPhotosGraph = NavigationGraph()
         mapToPhotosGraph.addNode(map)
+        mapToPhotosGraph.addNode(voidToVoidExit)
         mapToPhotosGraph.addSubgraph(photoSelectorSubgraph)
 
         mapToPhotosGraph.addEdge(Edge(
@@ -471,7 +512,12 @@ struct DemoGraphVariant1: GraphVending {
             }
         ))
 
-        let mapToPhotosSubgraph = NavSubgraph(id: "mapToPhotos", graph: mapToPhotosGraph, start: map)
+        let mapToPhotosSubgraph = NavSubgraph(
+            id: "mapToPhotos",
+            graph: mapToPhotosGraph,
+            entry: map,
+            exit: voidToVoidExit
+        )
         graph.addSubgraph(mapToPhotosSubgraph)
 
         graph.addEdge(Edge(
@@ -509,9 +555,7 @@ struct DemoGraphVariant1: GraphVending {
             from: signInSubgraph,
             to: end,
             transition: .push,
-            predicate: { result in
-                result == .signIn
-            }
+            predicate: { _ in true }
         ))
 
         graph.addEdge(Edge(
@@ -527,6 +571,7 @@ struct DemoGraphVariant1: GraphVending {
     }
 }
 
+/*
 struct DemoGraphVariant2: GraphVending {
 
     let registry: NodeRegistry
@@ -808,7 +853,7 @@ struct DemoGraphVariant2: GraphVending {
         return graph
     }
 }
-
+*/
 
 // MARK: - Variant 2
 

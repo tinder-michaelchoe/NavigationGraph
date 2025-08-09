@@ -44,7 +44,7 @@ class MapViewController: UIViewController, NavigableViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
 
-        hostedView.rootView.viewState.$didPressNext
+        viewState.$didPressNext
             .dropFirst()
             .sink { [weak self] _ in
                 guard let self else { return }
@@ -52,7 +52,7 @@ class MapViewController: UIViewController, NavigableViewController {
             }
             .store(in: &cancellables)
 
-        hostedView.rootView.viewState.$didPressSignIn
+        viewState.$didPressSignIn
             .dropFirst()
             .sink { [weak self] _ in
                 guard let self else { return }

@@ -43,7 +43,7 @@ class BeyondBinaryViewController: UIViewController, NavigableViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
 
-        hostedView.rootView.viewState.$didPressNext
+        viewState.$didPressNext
             .dropFirst()
             .sink { [weak self] _ in
                 guard let self else { return }
@@ -51,7 +51,7 @@ class BeyondBinaryViewController: UIViewController, NavigableViewController {
             }
             .store(in: &cancellables)
 
-        hostedView.rootView.viewState.$didPressSignIn
+        viewState.$didPressSignIn
             .dropFirst()
             .sink { [weak self] _ in
                 guard let self else { return }
@@ -59,7 +59,7 @@ class BeyondBinaryViewController: UIViewController, NavigableViewController {
             }
             .store(in: &cancellables)
 
-        hostedView.rootView.viewState.$selectedIdentity
+        viewState.$selectedIdentity
             .dropFirst()
             .sink { [weak self] selectedIdentity in
                 guard let self else { return }
@@ -92,8 +92,6 @@ class BeyondBinaryViewState: ObservableObject {
 struct BeyondBinaryView: View {
 
     @ObservedObject var viewState: BeyondBinaryViewState
-
-    //@State private var selectedIdentity: String? = nil
 
     let genderIdentities = [
         "Non-binary",

@@ -43,7 +43,7 @@ class SignInViewController: UIViewController, NavigableViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
 
-        hostedView.rootView.viewState.$didPressForgotPassword
+        viewState.$didPressForgotPassword
             .dropFirst()
             .sink { [weak self] _ in
                 guard let self else { return }
@@ -51,7 +51,7 @@ class SignInViewController: UIViewController, NavigableViewController {
             }
             .store(in: &cancellables)
 
-        hostedView.rootView.viewState.$didPressSignIn
+        viewState.$didPressSignIn
             .dropFirst()
             .sink { [weak self] _ in
                 guard let self else { return }

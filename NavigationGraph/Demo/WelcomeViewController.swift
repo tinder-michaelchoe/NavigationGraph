@@ -44,7 +44,7 @@ class WelcomeViewController: UIViewController, NavigableViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
 
-        hostedView.rootView.viewState.$didPressLogo
+        viewState.$didPressLogo
             .dropFirst()
             .sink { [weak self] _ in
                 guard let self else { return }
@@ -52,7 +52,7 @@ class WelcomeViewController: UIViewController, NavigableViewController {
             }
             .store(in: &cancellables)
 
-        hostedView.rootView.viewState.$didPressNext
+        viewState.$didPressNext
             .dropFirst()
             .sink { [weak self] _ in
                 guard let self else { return }
@@ -60,7 +60,7 @@ class WelcomeViewController: UIViewController, NavigableViewController {
             }
             .store(in: &cancellables)
 
-        hostedView.rootView.viewState.$didPressSignIn
+        viewState.$didPressSignIn
             .dropFirst()
             .sink { [weak self] _ in
                 guard let self else { return }

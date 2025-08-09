@@ -11,6 +11,8 @@ import UIKit
 
 final class ForgotPasswordNode: NavNode, ViewControllerProviding {
 
+    typealias Dependencies = SignInHomeNode
+
     typealias InputType = String?
     typealias OutputType = Void
 
@@ -42,7 +44,7 @@ class ForgotPasswordViewController: UIViewController, NavigableViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
 
-        hostedView.rootView.viewState.$didPressNext
+        viewState.$didPressNext
             .dropFirst()
             .sink { [weak self] _ in
                 guard let self else { return }

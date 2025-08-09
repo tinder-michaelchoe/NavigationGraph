@@ -30,6 +30,8 @@ final class AppCoordinator {
         nodeRegistry.register(MapNode())
         nodeRegistry.register(EndNode())
 
+        nodeRegistry.register(HeadlessNode<Void, Void>())
+
         let variant = DemoGraphVariant1(registry: nodeRegistry)
 
         // Uncomment to see other variant. Not as complete or robust.

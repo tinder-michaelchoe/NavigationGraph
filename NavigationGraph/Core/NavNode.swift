@@ -101,7 +101,10 @@ final class AnyNavNode {
         public let graph: NavigationGraph
 
         /// The identifier of the start node within `graph`.
-        public let startNodeId: String
+        public let entryNodeId: String
+
+        /// The identifier of the start node within `graph`.
+        public let exitNodeId: String
     }
 
     /// Creates a type-erased wrapper for a navigation node.
@@ -117,7 +120,12 @@ final class AnyNavNode {
         // protocol, capture its internal graph and start node id in
         // `subgraphWrapper`.  Otherwise leave it nil.
         if let sub = node as? NavSubgraphProtocol {
-            self.subgraphWrapper = SubgraphWrapper(id: sub.id, graph: sub.graph, startNodeId: sub.startNodeId)
+            self.subgraphWrapper = SubgraphWrapper(
+                id: sub.id,
+                graph: sub.graph,
+                entryNodeId: sub.entryNodeId,
+                exitNodeId: sub.exitNodeId
+            )
         } else {
             self.subgraphWrapper = nil
         }
@@ -127,11 +135,10 @@ final class AnyNavNode {
 extension AnyNavNode {
     /// Returns a type-erased view controller factory for this node.
     ///
-    /// - Returns: A view controller factory that can create instances for this node
-    /// - Precondition: The wrapped node must conform to `ViewControllerProviding`
+    /// - Returns: A view controller factory that can create instances for this node, or `nil` if unsupported
     var anyViewControllerProviding: AnyViewControllerProviding? {
         guard let viewControllerProviding = wrappedNode as? (any ViewControllerProviding) else {
-            fatalError("This node is not `ViewControllerProviding`")
+            return nil
         }
         return AnyViewControllerProviding(viewControllerProviding)
     }
@@ -162,12 +169,19 @@ extension AnyNavNode {
             
             // Recurse upward if the subgraph itself is wrapped in another subgraph node (linked by its graph's root node)
             // Assume the subgraph's graph contains a start node with its own AnyNavNode representation
-            let rootNode = subgraph.graph.nodes[subgraph.startNodeId]
+            let rootNode = subgraph.graph.nodes[subgraph.entryNodeId]
             let parentId = buildId(from: rootNode)
             return parentId.isEmpty ? subgraph.id : parentId + "." + subgraph.id
         }
         let prefix = buildId(from: self)
         return prefix.isEmpty ? id : prefix + "." + id
+    }
+}
+
+extension AnyNavNode {
+    /// Returns the type-erased headless processor if this node is a `HeadlessNode`.
+    var anyHeadlessProcessor: AnyHeadlessTransforming? {
+        return wrappedNode as? AnyHeadlessTransforming
     }
 }
 

@@ -74,6 +74,12 @@ public final class NavigationController: NSObject {
         /// The transition type used to present this node.
         let incomingTransition: TransitionType
     }
+
+    /// Lightweight dummy controller that conforms to NavigableViewController for headless nodes.
+    private final class DummyHeadlessViewController: UIViewController, NavigableViewController {
+        typealias CompletionType = Any
+        var onComplete: ((Any) -> Void)?
+    }
     
     /// The top-level navigation graph describing the application flow.
     private let graph: NavigationGraph
@@ -209,15 +215,15 @@ public final class NavigationController: NSObject {
         if let wrapper = node.subgraphWrapper {
             print("""
             ----------------------------
-            [NAV]: entering subgraph \(wrapper.id) starting at \(wrapper.startNodeId)
+            [NAV]: entering subgraph \(wrapper.id) starting at \(wrapper.entryNodeId)
             """)
 
             subgraphStack.append(node)
             print("[NAV DEBUG]: Pushed subgraph \(node.id) onto stack. Stack now: \(subgraphStack.map(\.id))")
 
             // Determine the start node of the subgraph.
-            guard let startWrapped = wrapper.graph.nodes[wrapper.startNodeId] else {
-                fatalError("Start node \(wrapper.startNodeId) is not registered in subgraph \(wrapper.id)")
+            guard let startWrapped = wrapper.graph.nodes[wrapper.entryNodeId] else {
+                fatalError("Start node \(wrapper.entryNodeId) is not registered in subgraph \(wrapper.id)")
             }
 
             // Begin the subgraph flow.  Use the subgraph's internal
@@ -228,11 +234,31 @@ public final class NavigationController: NSObject {
             return
         }
 
+        // Handle headless nodes immediately without presenting UI
+        if let processor = node.anyHeadlessProcessor {
+            // Push onto the stack to preserve navigation context
+            nodeStack.append(StackItem(
+                node: node,
+                data: data,
+                graph: currentGraph,
+                incomingTransition: incomingTransition
+            ))
+
+            let output = processor.transformAny(data)
+
+            // Use a dummy navigable controller for consistent completion handling
+            let dummy = DummyHeadlessViewController()
+            anyViewControllerToNode[AnyNavigableViewController(dummy).hash] = node
+            handleCompletion(from: dummy, output: output)
+            return
+        }
+
+        // Handle UI-providing nodes
         guard
             let anyViewControllerProviding = node.anyViewControllerProviding,
             let viewController = anyViewControllerProviding.viewControllerFactory(data).wrapped as? (any NavigableViewController)
         else {
-            fatalError("Couldn't find view controller provider.")
+            fatalError("Couldn't find view controller provider or headless processor.")
         }
         
         let anyNavigableViewController = AnyNavigableViewController(viewController)
@@ -385,7 +411,6 @@ public final class NavigationController: NSObject {
         } else {
             show(node: dest, data: nextData, incomingTransition: chosen.transition, graph: currentGraph)
         }
-
     }
     
     /// Attempts to exit the current subgraph and find navigation options in parent contexts.
@@ -544,6 +569,21 @@ public final class NavigationController: NSObject {
         else { return }
         anyViewControllerToNode[AnyNavigableViewController(navigableViewController).hash] = nil
         nodeStack.removeLast()
+
+        // If the next item on the stack is a headless node (which has no UIKit VC),
+        // remove consecutive headless nodes to keep internal stack in sync with UIKit's.
+        while let last = nodeStack.last, last.node.anyHeadlessProcessor != nil {
+            print("[NAV]: Removing headless node \(last.node.id) to sync with UI stack")
+            nodeStack.removeLast()
+        }
+
+        // Synchronize subgraph stack with current graph context
+        let currentGraphContext = nodeStack.last?.graph ?? self.graph
+        while let lastSubgraph = subgraphStack.last, let lastWrapper = lastSubgraph.subgraphWrapper {
+            if lastWrapper.graph === currentGraphContext { break }
+            print("[NAV]: Exiting subgraph \(lastWrapper.id) to sync with UI stack")
+            subgraphStack.removeLast()
+        }
 
         print("""
         ------------------------------------

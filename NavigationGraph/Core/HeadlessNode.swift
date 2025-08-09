@@ -30,7 +30,10 @@
 /// ```swift
 /// // Create a headless node for data validation
 /// let validationNode = HeadlessNode<UserData, ValidationResult>(
-///     id: "validateUser"
+///     process: { userData in
+///         // perform validation
+///         return validate(userData)
+///     }
 /// )
 ///
 /// // Use in a navigation graph
@@ -53,7 +56,7 @@
 /// ## Limitations
 ///
 /// - Cannot display user interfaces
-/// - Must complete processing synchronously
+/// - Should complete processing synchronously
 /// - Limited to data transformation and side effects
 /// - Cannot directly handle user interaction
 final class HeadlessNode<Input, Output>: NavNode {
@@ -69,25 +72,51 @@ final class HeadlessNode<Input, Output>: NavNode {
     /// and distinguish it from other nodes in the system.
     var id: String
     
-    /// Creates a new headless node with the specified identifier.
+    /// Processing closure that converts input into output.
     ///
-    /// - Parameter id: A unique identifier for this headless node
+    /// This closure is executed immediately when the node is visited by the navigation controller.
+    private let transform: (InputType) -> OutputType
+
+    /// Creates a new headless node with the specified identifier and processing closure.
+    ///
+    /// - Parameters:
+    ///   - id: A unique identifier for this headless node. Defaults to a generated id.
+    ///   - process: The processing closure to execute when this node is visited
     ///
     /// ## Example
     /// ```swift
     /// let processingNode = HeadlessNode<RawData, ProcessedData>(
-    ///     id: "dataProcessor"
+    ///     id: "dataProcessor",
+    ///     process: { raw in transform(raw) }
     /// )
     /// ```
-    ///
-    /// ## Identifier Guidelines
-    /// 
-    /// Choose descriptive identifiers that clearly indicate the node's purpose:
-    /// - "validateInput"
-    /// - "fetchUserProfile" 
-    /// - "calculateTotals"
-    /// - "logAnalytics"
-    init(id: String) {
+    init(
+        id: String = "Headless-\(InputType.self)->\(OutputType.self)",
+        transform: @escaping (InputType) -> OutputType
+    ) {
         self.id = id
+        self.transform = transform
+    }
+}
+
+extension HeadlessNode where Input == Void, Output == Void {
+    convenience init(id: String = "Headless-\(InputType.self)->\(OutputType.self)") {
+        self.init(id: id, transform: { _ in () })
+    }
+}
+
+// MARK: - Type erasure support for headless processing
+
+/// Internal protocol to expose type-erased processing for headless nodes.
+protocol AnyHeadlessTransforming {
+    func transformAny(_ input: Any) -> Any
+}
+
+extension HeadlessNode: AnyHeadlessTransforming {
+    func transformAny(_ input: Any) -> Any {
+        guard let typed = input as? InputType else {
+            fatalError("Type mismatch in HeadlessNode.processAny: expected \(InputType.self), received \(type(of: input))")
+        }
+        return transform(typed)
     }
 }
