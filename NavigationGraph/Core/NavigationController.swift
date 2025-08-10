@@ -63,15 +63,10 @@ public final class NavigationController: NSObject {
     /// the current navigation state and handle transitions.
     fileprivate enum StackEntry {
         case screen(node: AnyNavNode, data: Any, graph: NavigationGraph, incoming: TransitionType, uiHash: Int)
-        case headless(node: AnyNavNode, data: Any, graph: NavigationGraph, incoming: TransitionType)
         case subgraph(node: AnyNavNode, parentGraph: NavigationGraph, internalGraph: NavigationGraph)
     }
     
-    /// Lightweight dummy controller that conforms to NavigableViewController for headless nodes.
-    private final class DummyHeadlessViewController: UIViewController, NavigableViewController {
-        typealias CompletionType = Any
-        var onComplete: ((Any) -> Void)?
-    }
+
     
     /// The top-level navigation graph describing the application flow.
     private let graph: NavigationGraph
@@ -203,22 +198,37 @@ public final class NavigationController: NSObject {
 
         // Handle headless nodes immediately without presenting UI
         if let processor = node.anyHeadlessProcessor {
-            // Push onto the stack to preserve navigation context
-            nodeStack.append(
-                .headless(
-                    node: node,
-                    data: data,
-                    graph: currentGraph,
-                    incoming: incomingTransition
-                )
-            )
-
+            // Perform transformation synchronously and immediately navigate to the next eligible node.
             let output = processor.transformAny(data)
 
-            // Use a dummy navigable controller for consistent completion handling
-            let dummy = DummyHeadlessViewController()
-            anyViewControllerToNode[AnyNavigableViewController(dummy).hash] = node
-            handleCompletion(from: dummy, output: output)
+            // Evaluate edges in the current graph context for this headless node.
+            if let edge = findEligibleEdge(for: node, with: output, in: currentGraph) {
+                let nextData = edge.applyTransform(output)
+                print("""
+                -----------------------------------
+                \(node.fullyQualifiedId) --|\(edge.transition)|--> \(edge.toNode.fullyQualifiedId)
+                Input data: \(output)
+                Transformed data: \(nextData)
+                """)
+                show(
+                    node: edge.toNode,
+                    data: nextData,
+                    incomingTransition: edge.transition,
+                    graph: currentGraph
+                )
+                return
+            }
+
+            // If no edges, attempt to exit subgraph into parent graph.
+            if tryExitSubgraph(for: node, with: output) {
+                return
+            }
+
+            // No eligible edges found at any level; do nothing further.
+            print("""
+            -----------------------------------
+            [NAV]: No eligible edges found for headless node \(node.fullyQualifiedId)
+            """)
             return
         }
 
@@ -428,7 +438,7 @@ public final class NavigationController: NSObject {
             return false
         }
         let entry = nodeStack[sentinelIndex]
-guard case let .subgraph(subgraphNode, parentGraph, _) = entry else {
+        guard case let .subgraph(subgraphNode, parentGraph, _) = entry else {
             print("[NAV DEBUG]: Subgraph entry malformed, cannot exit")
             return false
         }
@@ -464,6 +474,40 @@ guard case let .subgraph(subgraphNode, parentGraph, _) = entry else {
         }
 
         print("[NAV DEBUG]: No exit found at current sentinel level")
+        return false
+    }
+
+    // New overload for headless flows where we have no UIViewController context
+    private func tryExitSubgraph(for node: AnyNavNode, with output: Any) -> Bool {
+        guard let sentinelIndex = nodeStack.lastIndex(where: { $0.isSubgraph }) else {
+            print("[NAV DEBUG]: Not at a subgraph sentinel, cannot exit")
+            return false
+        }
+        let entry = nodeStack[sentinelIndex]
+        guard case let .subgraph(subgraphNode, parentGraph, _) = entry else {
+            print("[NAV DEBUG]: Subgraph entry malformed, cannot exit")
+            return false
+        }
+        print("[NAV DEBUG]: Checking if we can exit subgraph \(subgraphNode.id) into parent graph (headless)")
+
+        if let edge = findEligibleEdge(for: subgraphNode, with: output, in: parentGraph) {
+            print("""
+            -----------------------------------
+            [NAV]: Found exit! Exiting subgraph \(subgraphNode.id) (headless)
+            \(subgraphNode.id) --|\(edge.transition)|--> \(edge.toNode.id)
+            """)
+
+            nodeStack.remove(at: sentinelIndex)
+            show(
+                node: edge.toNode,
+                data: edge.applyTransform(output),
+                incomingTransition: edge.transition,
+                graph: parentGraph
+            )
+            return true
+        }
+
+        print("[NAV DEBUG]: No exit found at current sentinel level (headless)")
         return false
     }
     
@@ -528,12 +572,7 @@ guard case let .subgraph(subgraphNode, parentGraph, _) = entry else {
             nodeStack.removeLast()
         }
 
-        // If the next item on the stack is a headless node (which has no UIKit VC),
-        // remove consecutive headless nodes to keep internal stack in sync with UIKit's.
-        while let last = nodeStack.last, last.uiControllerHash == nil {
-            print("[NAV]: Removing non-UI stack entry \(last.node.id) to sync with UI stack")
-            nodeStack.removeLast()
-        }
+        // No-op: Headless nodes are not tracked in the stack anymore
 
         // Synchronize subgraph sentinels with current graph context
         let currentGraphContext = nodeStack.last?.graphContext ?? self.graph
@@ -587,11 +626,7 @@ guard case let .subgraph(subgraphNode, parentGraph, _) = entry else {
             if !nodeStack.isEmpty { nodeStack.removeAll() }
         }
 
-        // 3) Remove trailing headless nodes after a pop
-        while let last = nodeStack.last, last.uiControllerHash == nil {
-            print("[NAV]: Removing trailing headless node \(last.node.id) during reconcile")
-            nodeStack.removeLast()
-        }
+        // No-op: Headless nodes are not tracked in the stack anymore
 
         // 4) Sync subgraphStack with current graph context
         let currentGraphContext = nodeStack.last?.graphContext ?? self.graph
@@ -672,41 +707,39 @@ private extension NavigationController.StackEntry {
     var node: AnyNavNode {
         switch self {
         case .screen(let node, _, _, _, _): return node
-        case .headless(let node, _, _, _): return node
+        
         case .subgraph(let node, _, _): return node
         }
     }
     var graphContext: NavigationGraph {
         switch self {
         case .screen(_, _, let graph, _, _): return graph
-        case .headless(_, _, let graph, _): return graph
+        
         case .subgraph(_, _, let internalGraph): return internalGraph
         }
     }
     var incomingTransition: TransitionType? {
         switch self {
         case .screen(_, _, _, let incoming, _): return incoming
-        case .headless(_, _, _, let incoming): return incoming
+        
         case .subgraph: return nil
         }
     }
     var uiControllerHash: Int? {
         switch self {
         case .screen(_, _, _, _, let uiHash): return uiHash
-        case .headless: return nil
+        
         case .subgraph: return nil
         }
     }
-    var isHeadless: Bool {
-        if case .headless = self { return true } else { return false }
-    }
+    var isHeadless: Bool { false }
     var isSubgraph: Bool {
         if case .subgraph = self { return true } else { return false }
     }
     var parentGraphForSubgraph: NavigationGraph? {
         if case .subgraph(_, let parent, _) = self { return parent } else { return nil }
-    }
+        }
     var internalGraphForSubgraph: NavigationGraph? {
         if case .subgraph(_, _, let internalGraph) = self { return internalGraph } else { return nil }
-    }
+        }
 }
