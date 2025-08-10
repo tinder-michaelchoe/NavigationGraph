@@ -433,48 +433,8 @@ public final class NavigationController: NSObject {
     /// output type and the subgraph's expected output type. The method handles this
     /// gracefully by passing the original output data.
     private func tryExitSubgraph(for node: AnyNavNode, with output: Any, from view: UIViewController) -> Bool {
-        guard let sentinelIndex = nodeStack.lastIndex(where: { $0.isSubgraph }) else {
-            print("[NAV DEBUG]: Not at a subgraph sentinel, cannot exit")
-            return false
-        }
-        let entry = nodeStack[sentinelIndex]
-        guard case let .subgraph(subgraphNode, parentGraph, _) = entry else {
-            print("[NAV DEBUG]: Subgraph entry malformed, cannot exit")
-            return false
-        }
-        // Use the subgraph node found
-        print("[NAV DEBUG]: Checking if we can exit subgraph \(subgraphNode.id) into parent graph")
-        print("[NAV DEBUG]: Current node output type: \(type(of: output)), value: \(output)")
-
-        let subgraphEdges = parentGraph.adjacency[subgraphNode.id] ?? []
-        print("[NAV DEBUG]: Subgraph \(subgraphNode.id) has \(subgraphEdges.count) outgoing edges in parent graph")
-
-        let subgraphOutput: Any = output
-        print("[NAV DEBUG]: Using original output (\(type(of: output))) for subgraph edge predicate evaluation")
-
-        if let edge = findEligibleEdge(for: subgraphNode, with: subgraphOutput, in: parentGraph) {
-            print("""
-            -----------------------------------
-            [NAV]: Found exit! Exiting subgraph \(subgraphNode.id)
-            \(subgraphNode.id) --|\(edge.transition)|--> \(edge.toNode.id)
-            """)
-
-            // Remove the subgraph sentinel from the stack
-            nodeStack.remove(at: sentinelIndex)
-            print("[NAV DEBUG]: Removed subgraph sentinel from stack")
-
-            // Navigate to the destination in the parent graph
-            show(
-                node: edge.toNode,
-                data: edge.applyTransform(output),
-                incomingTransition: edge.transition,
-                graph: parentGraph
-            )
-            return true
-        }
-
-        print("[NAV DEBUG]: No exit found at current sentinel level")
-        return false
+        // Delegate to the unified implementation that does not depend on a UIViewController
+        return tryExitSubgraph(for: node, with: output)
     }
 
     // New overload for headless flows where we have no UIViewController context
