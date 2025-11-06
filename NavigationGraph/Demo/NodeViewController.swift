@@ -38,7 +38,7 @@ final public class NodeViewController: UIViewController, NavigableViewController
         button.titleLabel?.font = UIFont.systemFont(ofSize: 18, weight: .semibold)
         button.backgroundColor = .black.withAlphaComponent(0.3)
         button.layer.cornerRadius = 8
-        button.contentEdgeInsets = UIEdgeInsets(top: 10, left: 20, bottom: 10, right: 20)
+        // button.contentEdgeInsets = UIEdgeInsets(top: 10, left: 20, bottom: 10, right: 20)
         button.addTarget(self, action: #selector(nextTapped), for: .touchUpInside)
         view.addAutolayoutSubview(button)
 

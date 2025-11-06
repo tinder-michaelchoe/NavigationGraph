@@ -45,18 +45,20 @@
 /// )
 /// ```
 public enum TransitionType: Equatable, CustomStringConvertible {
-    /// Standard navigation controller push animation.
+
+    case clearStackAndPush
+
+    /// Dismiss a modally presented view controller.
     ///
-    /// Use this for forward navigation in hierarchical flows. The new view controller
-    /// slides in from the right, and the back button appears automatically.
+    /// Use this to close modal presentations and return to the underlying
+    /// view controller that originally presented the modal.
     ///
     /// ## Behavior
-    /// - Adds the new view controller to the navigation stack
-    /// - Animates with a right-to-left slide transition
-    /// - Provides automatic back button functionality
-    /// - Updates the navigation bar title
-    case push
-    
+    /// - Dismisses the current modal presentation
+    /// - Animates with a top-to-bottom slide transition
+    /// - Returns to the presenting view controller
+    case dismiss
+
     /// Modal presentation over the current view controller.
     ///
     /// Use this for temporary screens, settings, or flows that are conceptually
@@ -68,7 +70,7 @@ public enum TransitionType: Equatable, CustomStringConvertible {
     /// - Does not add to the navigation stack
     /// - Requires explicit dismissal
     case modal
-    
+
     /// No visual transition - used for data-only navigation.
     ///
     /// Use this when you need to update the navigation state without changing
@@ -80,7 +82,7 @@ public enum TransitionType: Equatable, CustomStringConvertible {
     /// - Updates internal navigation state only
     /// - Useful for data processing nodes
     case none
-    
+
     /// Navigate backward by popping the current view controller.
     ///
     /// Use this to programmatically trigger backward navigation, equivalent
@@ -91,7 +93,7 @@ public enum TransitionType: Equatable, CustomStringConvertible {
     /// - Animates with a left-to-right slide transition
     /// - Returns to the previous view controller
     case pop
-    
+
     /// Pop to a specific index in the navigation stack.
     ///
     /// Use this to navigate back multiple levels in the navigation hierarchy,
@@ -115,17 +117,18 @@ public enum TransitionType: Equatable, CustomStringConvertible {
     /// )
     /// ```
     case popTo(Int)
-    
-    /// Dismiss a modally presented view controller.
+
+    /// Standard navigation controller push animation.
     ///
-    /// Use this to close modal presentations and return to the underlying
-    /// view controller that originally presented the modal.
+    /// Use this for forward navigation in hierarchical flows. The new view controller
+    /// slides in from the right, and the back button appears automatically.
     ///
     /// ## Behavior
-    /// - Dismisses the current modal presentation
-    /// - Animates with a top-to-bottom slide transition
-    /// - Returns to the presenting view controller
-    case dismiss
+    /// - Adds the new view controller to the navigation stack
+    /// - Animates with a right-to-left slide transition
+    /// - Provides automatic back button functionality
+    /// - Updates the navigation bar title
+    case push
 
     /// A human-readable description of the transition type.
     ///
@@ -133,12 +136,20 @@ public enum TransitionType: Equatable, CustomStringConvertible {
     /// and debugging navigation flows.
     public var description: String {
         switch self {
-        case .push: return "push"
-        case .none: return "none"
-        case .modal: return "modal"
-        case .pop: return "pop"
-        case .popTo(let index): return "popTo \(index)"
-        case .dismiss: return "dismiss"
+        case .clearStackAndPush:
+            return "clearStackAndPush"
+        case .dismiss:
+            return "dismiss"
+        case .modal:
+            return "modal"
+        case .none:
+            return "none"
+        case .pop:
+            return "pop"
+        case .popTo(let index):
+            return "popTo \(index)"
+        case .push:
+            return "push"
         }
     }
 }

@@ -7,6 +7,7 @@
 
 import UIKit
 
+/*
 protocol NodeCompletionHandling {
     var handleCompletion: (from: UIViewController, output: Any) { get }
 }
@@ -19,3 +20,4 @@ struct ViewControllerNodeCompletionHandler: NodeCompletionHandling {
 
 
 }
+*/

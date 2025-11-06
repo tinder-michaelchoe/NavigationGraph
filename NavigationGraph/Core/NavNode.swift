@@ -71,7 +71,7 @@ public protocol NavNode: AnyObject {
 ///
 /// If a node represents a nested subgraph, the `subgraphWrapper` property provides
 /// access to the internal graph structure without requiring type casting.
-final class AnyNavNode {
+public final class AnyNavNode {
 
     /// The node's unique identifier.
     let id: String

@@ -6,6 +6,45 @@
 //
 
 import UIKit
+import ObjectiveC
+
+// MARK: - Pluggable node presentation
+
+/// A handler capable of producing a presentable UI for a given node.
+///
+/// Implementations may wrap SwiftUI views, vend `UIViewController`s,
+/// or adapt custom presentation mechanisms. The handler must call the provided
+/// `onComplete` closure when the node's work is done.
+public protocol NodePresentationHandler {
+    func canHandle(node: AnyNavNode) -> Bool
+    func makeViewController(for node: AnyNavNode, input: Any, onComplete: @escaping (Any) -> Void) -> UIViewController?
+}
+
+/// Default handler for nodes that vend a `UIViewController` via `ViewControllerProviding`.
+struct DefaultUIKitNodeHandler: NodePresentationHandler {
+
+    func canHandle(node: AnyNavNode) -> Bool {
+        node.anyViewControllerProviding != nil
+    }
+
+    func makeViewController(
+        for node: AnyNavNode,
+        input: Any,
+        onComplete: @escaping (Any) -> Void
+    ) -> UIViewController? {
+        guard let provider = node.anyViewControllerProviding else {
+            return nil
+        }
+        let anyVC = provider.viewControllerFactory(input)
+        // Wire completion into the underlying VC
+        anyVC.onComplete = onComplete
+        // Present the underlying UIViewController, not the wrapper
+        guard let base = anyVC.wrapped as? UIViewController else {
+            return nil
+        }
+        return base
+    }
+}
 
 /// A controller that manages navigation through a `NavigationGraph` using an event-driven approach.
 ///
@@ -65,12 +104,45 @@ public final class NavigationController: NSObject {
         case screen(node: AnyNavNode, data: Any, graph: NavigationGraph, incoming: TransitionType, uiHash: Int)
         case subgraph(node: AnyNavNode, parentGraph: NavigationGraph, internalGraph: NavigationGraph)
     }
-    
+
+    fileprivate struct AssociatedNavigation {
+        let node: AnyNavNode
+        let graph: NavigationGraph
+        let subgraphTrail: [SubgraphFrame]
+        let incoming: TransitionType
+    }
+
+    fileprivate struct SubgraphFrame {
+        let node: AnyNavNode
+        let parent: NavigationGraph
+        let internalGraph: NavigationGraph
+    }
+
+    private struct NextResolution {
+        let edge: AnyNavEdge
+        let graph: NavigationGraph
+        let nextData: Any
+        let nextTrail: [SubgraphFrame]
+        let source: AnyNavNode
+    }
+
+    private enum NavigationCommand {
+        case clearStackAndPush(UIViewController, meta: AssociatedNavigation)
+        case dismiss
+        case modal(UIViewController, meta: AssociatedNavigation)
+        case pop
+        case popTo(Int)
+        case push(UIViewController, meta: AssociatedNavigation)
+    }
+
     /// The top-level navigation graph describing the application flow.
     private let graph: NavigationGraph
     
     /// The UIKit navigation controller used to present view controllers.
     private let navigationController: UINavigationController
+    
+    /// Handlers used to render nodes into presentable UI.
+    private let handlers: [NodePresentationHandler]
     
     /// A stack of visited nodes with their associated context.
     ///
@@ -109,13 +181,22 @@ public final class NavigationController: NSObject {
     /// to handle navigation events like back button taps and swipe gestures.
     public init(
         graph: NavigationGraph,
-        navigationController: UINavigationController
+        navigationController: UINavigationController,
+        handlers: [NodePresentationHandler]
     ) {
         self.graph = graph
         self.navigationController = navigationController
+        self.handlers = handlers
         super.init()
-
         self.navigationController.delegate = self
+    }
+
+    /// Convenience initializer that installs a default UIKit handler.
+    public convenience init(
+        graph: NavigationGraph,
+        navigationController: UINavigationController
+    ) {
+        self.init(graph: graph, navigationController: navigationController, handlers: [DefaultUIKitNodeHandler()])
     }
 
     /// Begins navigation at the specified node with the provided initial data.
@@ -143,329 +224,220 @@ public final class NavigationController: NSObject {
         ----------------------------
         [NAV]: Starting at node \(start.id)
         """)
-        show(node: wrapped, data: data, incomingTransition: .push, graph: graph)
+        visit(node: wrapped, data: data, in: graph, incoming: .push, subgraphTrail: [])
     }
 
-    /// Presents a node on screen with the specified data and transition.
-    ///
-    /// This method handles both regular nodes and subgraphs, automatically
-    /// switching context when entering nested navigation flows.
-    ///
-    /// - Parameters:
-    ///   - node: The node to present
-    ///   - data: The input data for the node
-    ///   - incomingTransition: The transition type to use
-    ///   - currentGraph: The graph context for resolving edges
-    ///
-    /// ## Subgraph Handling
-    ///
-    /// When the node represents a subgraph:
-    /// 1. The subgraph is pushed onto the subgraph stack
-    /// 2. Navigation switches to the subgraph's internal graph
-    /// 3. The subgraph's start node is presented
-    ///
-    /// ## View Controller Creation
-    ///
-    /// For regular nodes:
-    /// 1. Creates a view controller using the node's factory
-    /// 2. Sets up completion callback handling
-    /// 3. Presents using the specified transition type
-    private func show(
+    // MARK: - Unified visit entry
+
+    // Convenience method
+    private func visit(next: NextResolution) {
+        visit(
+            node: next.edge.toNode,
+            data: next.nextData,
+            in: next.graph,
+            incoming: next.edge.transition,
+            subgraphTrail: next.nextTrail
+        )
+    }
+
+    private func visit(
         node: AnyNavNode,
         data: Any,
-        incomingTransition: TransitionType,
-        graph currentGraph: NavigationGraph
+        in currentGraph: NavigationGraph,
+        incoming: TransitionType,
+        subgraphTrail: [SubgraphFrame]
     ) {
-        
-        // Subgraph
+        // Enter subgraph nodes immediately
         if let wrapper = node.subgraphWrapper {
             print("""
             ----------------------------
             [NAV]: entering subgraph \(wrapper.id) starting at \(wrapper.entryNodeId)
             """)
-
-            nodeStack.append(.subgraph(node: node, parentGraph: currentGraph, internalGraph: wrapper.graph))
-
-            // Determine the entry node of the subgraph and start navigation inside it
             guard let entryWrapped = wrapper.graph.nodes[wrapper.entryNodeId] else {
                 fatalError("Entry node \(wrapper.entryNodeId) is not registered in subgraph \(wrapper.id)")
             }
-            show(node: entryWrapped, data: data, incomingTransition: incomingTransition, graph: wrapper.graph)
+            var nextTrail = subgraphTrail
+            nextTrail.append(SubgraphFrame(node: node, parent: currentGraph, internalGraph: wrapper.graph))
+            visit(node: entryWrapped, data: data, in: wrapper.graph, incoming: incoming, subgraphTrail: nextTrail)
             return
         }
 
-        // Handle headless nodes immediately without presenting UI
-        if let processor = node.anyHeadlessProcessor {
-            // Perform transformation synchronously and immediately navigate to the next eligible node.
-            let output = processor.transformAny(data)
-
-            // Evaluate edges in the current graph context for this headless node.
-            if let edge = findEligibleEdge(for: node, with: output, in: currentGraph) {
-                let nextData = edge.applyTransform(output)
+        // Headless nodes are processed immediately and do not appear on the UI stack
+        if let headless = node.anyHeadlessProcessor {
+            let output = headless.transformAny(data)
+            if let resolved = resolveNext(from: node, output: output, startingIn: currentGraph, trail: subgraphTrail) {
                 print("""
                 -----------------------------------
-                \(node.fullyQualifiedId) --|\(edge.transition)|--> \(edge.toNode.fullyQualifiedId)
+                \(resolved.source.fullyQualifiedId) --|\(resolved.edge.transition)|--> \(resolved.edge.toNode.fullyQualifiedId)
                 Input data: \(output)
-                Transformed data: \(nextData)
+                Transformed data: \(resolved.nextData)
                 """)
-                show(
-                    node: edge.toNode,
-                    data: nextData,
-                    incomingTransition: edge.transition,
-                    graph: currentGraph
-                )
+                dispatch(resolution: resolved, incoming: incoming)
                 return
+            } else {
+                print("""
+                -----------------------------------
+                [NAV]: No eligible edges found for headless node \(node.fullyQualifiedId)
+                """)
             }
-
-            // If no edges, attempt to exit subgraph into parent graph.
-            if tryExitSubgraph(for: node, with: output) {
-                return
-            }
-
-            // No eligible edges found at any level; do nothing further.
-            print("""
-            -----------------------------------
-            [NAV]: No eligible edges found for headless node \(node.fullyQualifiedId)
-            """)
             return
         }
 
-        // Handle UI-providing nodes
-        guard
-            let anyViewControllerProviding = node.anyViewControllerProviding,
-            let viewController = anyViewControllerProviding.viewControllerFactory(data).wrapped as? (any NavigableViewController)
-        else {
-            fatalError("Couldn't find view controller provider or headless processor.")
-        }
-        
-        let anyNavigableViewController = AnyNavigableViewController(viewController)
-        
-        anyViewControllerToNode[anyNavigableViewController.hash] = node
-        anyNavigableViewController.onComplete = { [weak self, weak viewController] output in
-            guard let self, let viewController else { return }
-            handleCompletion(from: viewController, output: output)
+        // UI-providing nodes → build via handler, attach metadata, execute transition
+        guard let viewController = makeViewController(
+            for: node,
+            input: data,
+            trail: subgraphTrail,
+            graph: currentGraph,
+            incoming: incoming
+        ) else {
+            fatalError("No handler could present node \(node.id)")
         }
 
-        switch incomingTransition {
+        let meta = AssociatedNavigation(node: node, graph: currentGraph, subgraphTrail: subgraphTrail, incoming: incoming)
+        switch incoming {
+        case .clearStackAndPush:
+            execute(.clearStackAndPush(viewController, meta: meta))
+        case .dismiss:
+            execute(.dismiss)
+        case .modal:
+            execute(.modal(viewController, meta: meta))
+        case .none:
+            break
+        case .pop:
+            execute(.pop)
+        case .popTo(let index):
+            execute(.popTo(index))
+        case .push:
+            execute(.push(viewController, meta: meta))
+        }
+    }
+
+    // MARK: - Decision layer (pure resolver)
+    private func resolveNext(
+        from node: AnyNavNode,
+        output: Any,
+        startingIn graph: NavigationGraph,
+        trail: [SubgraphFrame]
+    ) -> NextResolution? {
+        // Try within current graph using the node itself
+        if let edge = findEligibleEdge(for: node, with: output, in: graph) {
+            return NextResolution(
+                edge: edge,
+                graph: graph,
+                nextData: edge.applyTransform(output),
+                nextTrail: trail,
+                source: node
+            )
+        }
+        // Climb out through subgraph sentinels
+        var tmpTrail = trail
+        while let last = tmpTrail.last {
+            if let edge = findEligibleEdge(for: last.node, with: output, in: last.parent) {
+                let nextTrail = tmpTrail.dropLast()
+                return NextResolution(
+                    edge: edge,
+                    graph: last.parent,
+                    nextData: edge.applyTransform(output),
+                    nextTrail: Array(nextTrail),
+                    source: last.node
+                )
+            }
+            tmpTrail.removeLast()
+        }
+        return nil
+    }
+
+    // MARK: - Unified transition dispatcher
+    private func dispatch(resolution: NextResolution, incoming: TransitionType) {
+        // Backward navigation commands
+        switch resolution.edge.transition {
+        case .pop:
+            execute(.pop)
+            return
+        case .popTo(let idx):
+            execute(.popTo(idx))
+            return
+        case .dismiss:
+            execute(.dismiss)
+            return
+        default:
+            break
+        }
+        // Forward navigation; if current was modal, dismiss before visiting next
+        if incoming == .modal {
+            navigationController.dismiss(animated: true) { [weak self] in
+                guard let self else { return }
+                visit(next: resolution)
+            }
+        } else {
+            visit(next: resolution)
+        }
+    }
+
+    // MARK: - Execution layer (commands)
+
+    private func execute(_ command: NavigationCommand) {
+        switch command {
+        case .clearStackAndPush(let viewController, let meta):
+            viewController.navAssociatedNavigation = meta
+            navigationController.setViewControllers([viewController], animated: true)
         case .dismiss:
             navigationController.dismiss(animated: true)
-            nodeStack.removeLast()
-        case .modal:
-
-            // iOS doesn't allow setting the delegate for alerts
+        case .modal(let viewController, let meta):
+            viewController.navAssociatedNavigation = meta
             if !(viewController is UIAlertController) {
                 viewController.presentationController?.delegate = self
             }
             navigationController.present(viewController, animated: true)
-
-            nodeStack.append(
-                .screen(
-                    node: node,
-                    data: data,
-                    graph: currentGraph,
-                    incoming: incomingTransition,
-                    uiHash: AnyNavigableViewController(viewController).hash
-                )
-            )
-        case .none:
-            nodeStack.removeLast()
         case .pop:
-            // Should pop back to ancestor
             navigationController.popViewController(animated: true)
-            nodeStack.removeLast()
         case .popTo(let index):
-
             if index == 0 {
                 navigationController.popToRootViewController(animated: true)
-                nodeStack.removeLast(navigationController.viewControllers.count - 1)
-                return
+            } else {
+                let viewControllers = navigationController.viewControllers
+                if index < viewControllers.count {
+                    navigationController.popToViewController(viewControllers[index], animated: true)
+                }
             }
-
-            fatalError("TODO: Need to implement popping to arbitrary point in stack")
-
-            //let dropTotal = navigationController.viewControllers.count - index - 1
-            //_ = navigationController.viewControllers.dropLast(dropTotal)
-        case .push:
+        case .push(let viewController, let meta):
+            viewController.navAssociatedNavigation = meta
             navigationController.pushViewController(viewController, animated: true)
-            
-            print("[NAV DEBUG]: Adding node \(node.id) to stack")
-            nodeStack.append(
-                .screen(
-                    node: node,
-                    data: data,
-                    graph: currentGraph,
-                    incoming: incomingTransition,
-                    uiHash: AnyNavigableViewController(viewController).hash
-                )
-            )
         }
-        reconcile(caller: "show(node:)")
+        rebuildStateFromUI()
     }
 
-    /// Handles completion of a view controller by finding the next navigation step.
-    ///
-    /// This method is called when a view controller invokes its completion handler.
-    /// It evaluates outgoing edges from the current node and navigates to the next
-    /// destination if an eligible edge is found.
-    ///
-    /// - Parameters:
-    ///   - view: The view controller that completed
-    ///   - output: The output data from the view controller
-    ///
-    /// ## Edge Evaluation Process
-    ///
-    /// 1. **Find outgoing edges**: Look up edges from the current node
-    /// 2. **Filter by predicate**: Test each edge's predicate against the output data
-    /// 3. **Choose first match**: Select the first edge whose predicate returns true
-    /// 4. **Transform data**: Apply the edge's transform to prepare data for the destination
-    /// 5. **Navigate**: Present the destination node with the transformed data
-    ///
-    /// ## Subgraph Exit Handling
-    ///
-    /// If no eligible edges are found in the current graph context, the method
-    /// attempts to exit nested subgraphs and continue navigation in parent contexts.
-    ///
-    /// ## Modal Dismissal
-    ///
-    /// If the current view controller was presented modally, it's dismissed before
-    /// presenting the next screen to avoid UIKit presentation conflicts.
-    private func handleCompletion(from view: UIViewController, output: Any) {
-        guard
-            let navigableViewController = view as? any NavigableViewController,
-            let node = anyViewControllerToNode[AnyNavigableViewController(navigableViewController).hash],
-            let currentEntry = nodeStack.last
-        else {
-            fatalError("Couldn't get last node.")
-        }
-        let currentGraph = currentEntry.graphContext
-        let incoming = currentEntry.incomingTransition ?? .push
-
-        // Proactively exit subgraph if we're on its explicit exit node
-        if let subIdx = nodeStack.lastIndex(where: { $0.isSubgraph }),
-           case let .subgraph(subgraphNode, _, internalGraph) = nodeStack[subIdx],
-           let wrapper = subgraphNode.subgraphWrapper,
-           currentGraph === internalGraph,
-           wrapper.exitNodeId == node.id {
-            if tryExitSubgraph(for: subgraphNode, with: output, from: view) { return }
-        }
-
-        // Outgoing edges for the node in the appropriate graph.
-        let edges = currentGraph.adjacency[node.id] ?? []
-
-        // Filter edges based on their predicate.  The predicate is
-        // evaluated against the data returned from the screen.  Only
-        // edges whose predicate returns `true` are considered.
-        let candidates = edges.filter { edge in
-            return edge.predicateAny(output)
-        }
-        guard !candidates.isEmpty else {
-            // No eligible edges in current graph; try to exit subgraphs recursively
-            if tryExitSubgraph(for: node, with: output, from: view) {
-                return
+    // MARK: - VC building via handlers
+    private func makeViewController(
+        for node: AnyNavNode,
+        input: Any,
+        trail: [SubgraphFrame],
+        graph: NavigationGraph,
+        incoming: TransitionType
+    ) -> UIViewController? {
+        guard let handler = handlers.first(where: { $0.canHandle(node: node) }) else { return nil }
+        let viewController = handler.makeViewController(for: node, input: input) { [weak self] output in
+            guard let self else { return }
+            if let resolved = resolveNext(from: node, output: output, startingIn: graph, trail: trail) {
+                print("""
+                -----------------------------------
+                \(resolved.source.fullyQualifiedId) --|\(resolved.edge.transition)|--> \(resolved.edge.toNode.fullyQualifiedId)
+                Input data: \(output)
+                Transformed data: \(resolved.nextData)
+                """)
+                dispatch(resolution: resolved, incoming: incoming)
+            } else {
+                print("""
+                -----------------------------------
+                [NAV]: No eligible edges found for \(node.fullyQualifiedId), staying on current screen
+                """)
             }
-            // No eligible edges found at any level; remain on the current screen
-            print("""
-            -----------------------------------
-            [NAV]: No eligible edges found for \(node.fullyQualifiedId), staying on current screen
-            """)
-            return
         }
-
-        // Choose the first eligible edge.
-        let chosen = candidates[0]
-
-        // Compute the data for the next node using the edge's transform.
-        let nextData = chosen.applyTransform(output)
-        let transitionType = chosen.transition
-        print("""
-        -----------------------------------
-        \(node.fullyQualifiedId) --|\(transitionType)|--> \(chosen.toNode.fullyQualifiedId)
-        Input data: \(output)
-        Transformed data: \(nextData)
-        """)
-
-        // Determine the destination node within the current graph.
-        guard let dest = currentGraph.nodes[chosen.toNode.id] else {
-            fatalError("Destination node \(chosen.toNode.id) is not registered in the current graph")
+        guard let viewController else {
+            fatalError("No View Controller")
         }
-        // If this screen was presented modally, dismiss it before
-        // presenting the next screen.  UIKit cannot present a new
-        // controller while another is being presented.  Otherwise,
-        // simply show the next node immediately.
-        if incoming == .modal {
-
-            // Dismiss the current view controller.  Once dismissal
-            // completes, present the next node.
-            view.dismiss(animated: true) { [weak self] in
-                guard let self else { return }
-                show(node: dest, data: nextData, incomingTransition: chosen.transition, graph: currentGraph)
-            }
-        } else {
-            show(node: dest, data: nextData, incomingTransition: chosen.transition, graph: currentGraph)
-        }
-    }
-    
-    /// Attempts to exit the current subgraph and find navigation options in parent contexts.
-    ///
-    /// This method is called when no eligible edges are found in the current graph context.
-    /// It recursively checks parent subgraphs to find valid navigation paths.
-    ///
-    /// - Parameters:
-    ///   - node: The current node with no outgoing edges
-    ///   - output: The output data from the current node
-    ///   - view: The current view controller
-    /// - Returns: `true` if navigation occurred, `false` if no valid exit was found
-    ///
-    /// ## Algorithm
-    ///
-    /// 1. **Check subgraph stack**: Verify there are subgraphs to exit
-    /// 2. **Iterate parent contexts**: Try each subgraph level from innermost to outermost
-    /// 3. **Find parent graph**: Determine the correct graph for edge resolution
-    /// 4. **Evaluate edges**: Look for eligible edges from the subgraph node
-    /// 5. **Navigate or continue**: Either navigate to a destination or try the next level
-    ///
-    /// ## Type Safety Note
-    ///
-    /// When exiting subgraphs, there can be type mismatches between the exiting node's
-    /// output type and the subgraph's expected output type. The method handles this
-    /// gracefully by passing the original output data.
-    private func tryExitSubgraph(for node: AnyNavNode, with output: Any, from view: UIViewController) -> Bool {
-        // Delegate to the unified implementation that does not depend on a UIViewController
-        return tryExitSubgraph(for: node, with: output)
-    }
-
-    // New overload for headless flows where we have no UIViewController context
-    private func tryExitSubgraph(for node: AnyNavNode, with output: Any) -> Bool {
-        guard let sentinelIndex = nodeStack.lastIndex(where: { $0.isSubgraph }) else {
-            print("[NAV DEBUG]: Not at a subgraph sentinel, cannot exit")
-            return false
-        }
-        let entry = nodeStack[sentinelIndex]
-        guard case let .subgraph(subgraphNode, parentGraph, _) = entry else {
-            print("[NAV DEBUG]: Subgraph entry malformed, cannot exit")
-            return false
-        }
-        print("[NAV DEBUG]: Checking if we can exit subgraph \(subgraphNode.id) into parent graph (headless)")
-
-        if let edge = findEligibleEdge(for: subgraphNode, with: output, in: parentGraph) {
-            print("""
-            -----------------------------------
-            [NAV]: Found exit! Exiting subgraph \(subgraphNode.id) (headless)
-            \(subgraphNode.id) --|\(edge.transition)|--> \(edge.toNode.id)
-            """)
-
-            nodeStack.remove(at: sentinelIndex)
-            show(
-                node: edge.toNode,
-                data: edge.applyTransform(output),
-                incomingTransition: edge.transition,
-                graph: parentGraph
-            )
-            return true
-        }
-
-        print("[NAV DEBUG]: No exit found at current sentinel level (headless)")
-        return false
+        return viewController
     }
     
     /// Finds an eligible edge for a node with given output data in the specified graph.
@@ -505,101 +477,32 @@ public final class NavigationController: NSObject {
         return candidates.first
     }
     
-    /// Handles cleanup when nodes are removed from the navigation stack.
-    ///
-    /// This method is called when view controllers are popped or dismissed,
-    /// ensuring that internal state remains consistent with the UIKit navigation stack.
-    ///
-    /// - Parameter view: The view controller that was removed
-    private func handlePop(for view: UIViewController) {
-        guard
-            let navigableViewController = view as? any NavigableViewController,
-            let poppedNode = anyViewControllerToNode[AnyNavigableViewController(navigableViewController).hash]
-        else { return }
-        anyViewControllerToNode[AnyNavigableViewController(navigableViewController).hash] = nil
-        // Remove the last screen entry
-        if let idx = nodeStack.lastIndex(where: { entry in
-            if case let .screen(node, _, _, _, uiHash) = entry {
-                return node.id == poppedNode.id && uiHash == AnyNavigableViewController(navigableViewController).hash
+    /// Rebuild nodeStack from the UIKit stack as the sole source of truth.
+    private func rebuildStateFromUI() {
+        nodeStack.removeAll(keepingCapacity: true)
+        var appliedTrail: [SubgraphFrame] = []
+        for vc in navigationController.viewControllers {
+            guard let meta = vc.navAssociatedNavigation else { continue }
+            // Longest common prefix between appliedTrail and meta.subgraphTrail
+            var i = 0
+            while i < appliedTrail.count && i < meta.subgraphTrail.count {
+                let a = appliedTrail[i]
+                let b = meta.subgraphTrail[i]
+                if a.node.id == b.node.id { i += 1 } else { break }
             }
-            return false
-        }) {
-            nodeStack.remove(at: idx)
-        } else {
-            nodeStack.removeLast()
+            if appliedTrail.count > i { nodeStack.removeLast(appliedTrail.count - i) }
+            appliedTrail = Array(appliedTrail.prefix(i))
+            for j in i..<meta.subgraphTrail.count {
+                let s = meta.subgraphTrail[j]
+                nodeStack.append(.subgraph(node: s.node, parentGraph: s.parent, internalGraph: s.internalGraph))
+                appliedTrail.append(s)
+            }
+            // Append the screen entry
+            nodeStack.append(.screen(node: meta.node, data: (), graph: meta.graph, incoming: meta.incoming, uiHash: vc.hash))
         }
-
-        // No-op: Headless nodes are not tracked in the stack anymore
-
-        // Synchronize subgraph sentinels with current graph context
-        let currentGraphContext = nodeStack.last?.graphContext ?? self.graph
-        while let last = nodeStack.last, last.isSubgraph, let parent = last.parentGraphForSubgraph {
-            if parent === currentGraphContext { break }
-            print("[NAV]: Exiting subgraph sentinel to sync with UI stack")
-            nodeStack.removeLast()
-        }
-
-        print("""
-        ------------------------------------
-        [NAV]: popped node \(poppedNode.id). Current node is now \(nodeStack.last?.node.id ?? "none")
-        """)
-
-    }
-
-    // MARK: - Reconciliation to keep UIKit, nodeStack, and subgraphStack in sync
-    private func reconcile(caller: String) {
         #if DEBUG
-        print("[NAV RECONCILE] invoked by: \(caller)")
-        #endif
-
-        // 1) Determine the active anchor VC: presented modal or top of nav stack
-        let anchorVC: UIViewController? = navigationController.presentedViewController ?? navigationController.topViewController
-
-        // 2) Prune nodeStack to anchor
-        if let anchorVC {
-            // Find the matching StackItem by uiControllerHash if available; fallback to mapping
-            let anchorHash = anchorVC is AnyNavigableViewController ? anchorVC.hash : anchorVC.hash
-            if let idx = nodeStack.lastIndex(where: { $0.uiControllerHash == anchorHash }) {
-                // Trim any items above idx
-                if idx < nodeStack.count - 1 { nodeStack.removeLast(nodeStack.count - 1 - idx) }
-            } else if let mappedNode = anyViewControllerToNode[anchorVC.hash] {
-                if let idx = nodeStack.lastIndex(where: { $0.node.id == mappedNode.id }) {
-                    if idx < nodeStack.count - 1 { nodeStack.removeLast(nodeStack.count - 1 - idx) }
-                }
-            }
-        } else {
-            // No anchor VC; if we still have stack entries with UI, trim to none
-            // Keep at most trailing headless nodes only if desired; simplest: clear stack
-            // But prefer to leave root if appropriate. For now, do nothing.
-        }
-
-        // Fallback: ensure no non-UI entries remain above last on-screen UI entry
-        if let lastScreenIdx = nodeStack.lastIndex(where: { $0.uiControllerHash != nil }) {
-            if lastScreenIdx < nodeStack.count - 1 {
-                nodeStack.removeLast(nodeStack.count - 1 - lastScreenIdx)
-            }
-        } else {
-            // No screens in the stack → drop all non-UI entries
-            if !nodeStack.isEmpty { nodeStack.removeAll() }
-        }
-
-        // No-op: Headless nodes are not tracked in the stack anymore
-
-        // 4) Sync subgraphStack with current graph context
-        let currentGraphContext = nodeStack.last?.graphContext ?? self.graph
-        while let last = nodeStack.last, last.isSubgraph, let parent = last.parentGraphForSubgraph {
-            if parent === currentGraphContext { break }
-            print("[NAV]: Exiting subgraph sentinel during reconcile")
-            nodeStack.removeLast()
-        }
-
-        // 5) DEBUG invariants
-        #if DEBUG
-        let uiHashes = navigationController.viewControllers.map { $0.hash }
-        let stackHashes = nodeStack.compactMap { $0.uiControllerHash }
-        if uiHashes != stackHashes {
-            print("[NAV WARN]: UI stack hashes != internal stack hashes\nUI: \(uiHashes)\nIN: \(stackHashes)")
-        }
+        print("[NAV]: Rebuilt nodeStack from UI")
+        print(nodeStack.map(\.node.id).joined(separator: " -> "))
         #endif
     }
 }
@@ -634,8 +537,8 @@ extension NavigationController: UINavigationControllerDelegate {
         else {
             return
         }
-        handlePop(for: fromVC)
-        reconcile(caller: "navigationController(didShow:)")
+        // A VC was popped; rebuild from UI source of truth
+        rebuildStateFromUI()
     }
 }
 
@@ -654,9 +557,18 @@ extension NavigationController: UIAdaptivePresentationControllerDelegate {
     ///
     /// - Parameter presentationController: The presentation controller that was dismissed
     public func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
-        let dismissedVC = presentationController.presentedViewController
-        handlePop(for: dismissedVC)
-        reconcile(caller: "presentationControllerDidDismiss(_:)")
+        rebuildStateFromUI()
+    }
+}
+
+// MARK: - UIViewController associated navigation metadata
+private extension UIViewController {
+    struct _NavAssocKeys {
+        static var navMetaKey: UInt8 = 0
+    }
+    var navAssociatedNavigation: NavigationController.AssociatedNavigation? {
+        get { objc_getAssociatedObject(self, &_NavAssocKeys.navMetaKey) as? NavigationController.AssociatedNavigation }
+        set { objc_setAssociatedObject(self, &_NavAssocKeys.navMetaKey, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC) }
     }
 }
 
