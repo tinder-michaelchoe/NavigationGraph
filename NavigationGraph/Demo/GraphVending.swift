@@ -226,68 +226,14 @@ struct DemoGraphVariant1: GraphVending {
         graph.addNode(registry.resolve(WelcomeNode.self))
         graph.addNode(registry.resolve(OneShotAlertNode.self))
 
-        // Sign In Subgraph
-        let signinGraph = NavigationGraph()
-
-        signinGraph.addNode(signinHome)
-        signinGraph.addNode(forgotPassword)
-        signinGraph.addNode(oneShotErrorNode)
-        signinGraph.addNode(voidToVoidExit)
-
-        signinGraph.addEdge(Edge(
-            from: signinHome,
-            to: forgotPassword,
-            transition: .push,
-            predicate: { result in
-                switch result {
-                case .forgotPassword(_):
-                    return true
-                case .signIn:
-                    return false
-                }
-            },
-            transform: { result in
-                guard case let SignInViewController.SignInResult.forgotPassword(possibleEmail) = result else {
-                    return ""
-                }
-                return possibleEmail
-            }
-        ))
-
-        signinGraph.addEdge(Edge(
-            from: signinHome,
-            to: voidToVoidExit,
-            transition: .none,
-            predicate: { _ in true }
-        ))
-
-        signinGraph.addEdge(Edge(
-            from: forgotPassword,
-            to: oneShotErrorNode,
-            transition: .modal,
-            predicate: { _ in true },
-            transform: { _ in
-                return ("Check your email", "We sent a password reset link.")
-            }
-        ))
-
-        signinGraph.addEdge(Edge(
-            from: oneShotErrorNode,
-            to: forgotPassword,
-            transition: .none,
-            predicate: { _ in true },
-            transform: { _ in
-                return nil
-            }
-        ))
-
+        let signInGraph = SignInGraph(registry: registry).graph
         let signInSubgraph = NavSubgraph(
             id: "signInSubgraph",
-            graph: signinGraph,
+            graph: signInGraph,
             entry: signinHome,
             exit: voidToVoidExit
         )
-        graph.addSubgraph(signInSubgraph)
+        graph.addNode(signInSubgraph)
 
         graph.addEdge(Edge(
             from: welcome,
@@ -295,7 +241,6 @@ struct DemoGraphVariant1: GraphVending {
             transition: .push,
             predicate: { $0 == .signIn }
         ))
-
 
         graph.addNode(gender)
         graph.addNode(beyondBinary)

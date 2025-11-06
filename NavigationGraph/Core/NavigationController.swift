@@ -66,8 +66,6 @@ public final class NavigationController: NSObject {
         case subgraph(node: AnyNavNode, parentGraph: NavigationGraph, internalGraph: NavigationGraph)
     }
     
-
-    
     /// The top-level navigation graph describing the application flow.
     private let graph: NavigationGraph
     
@@ -397,8 +395,7 @@ public final class NavigationController: NSObject {
         if incoming == .modal {
 
             // Dismiss the current view controller.  Once dismissal
-            // completes, present the next node.  Capture self weakly
-            // to avoid retain cycles.
+            // completes, present the next node.
             view.dismiss(animated: true) { [weak self] in
                 guard let self else { return }
                 show(node: dest, data: nextData, incomingTransition: chosen.transition, graph: currentGraph)
@@ -666,40 +663,60 @@ extension NavigationController: UIAdaptivePresentationControllerDelegate {
 private extension NavigationController.StackEntry {
     var node: AnyNavNode {
         switch self {
-        case .screen(let node, _, _, _, _): return node
-        
-        case .subgraph(let node, _, _): return node
+        case .screen(let node, _, _, _, _):
+            return node
+
+        case .subgraph(let node, _, _):
+            return node
         }
     }
     var graphContext: NavigationGraph {
         switch self {
-        case .screen(_, _, let graph, _, _): return graph
-        
-        case .subgraph(_, _, let internalGraph): return internalGraph
+        case .screen(_, _, let graph, _, _):
+            return graph
+
+        case .subgraph(_, _, let internalGraph):
+            return internalGraph
         }
     }
     var incomingTransition: TransitionType? {
         switch self {
-        case .screen(_, _, _, let incoming, _): return incoming
-        
-        case .subgraph: return nil
+        case .screen(_, _, _, let incoming, _):
+            return incoming
+
+        case .subgraph:
+            return nil
         }
     }
     var uiControllerHash: Int? {
         switch self {
-        case .screen(_, _, _, _, let uiHash): return uiHash
-        
-        case .subgraph: return nil
+        case .screen(_, _, _, _, let uiHash):
+            return uiHash
+
+        case .subgraph:
+            return nil
         }
     }
     var isHeadless: Bool { false }
     var isSubgraph: Bool {
-        if case .subgraph = self { return true } else { return false }
+        if case .subgraph = self {
+            return true
+        } else {
+            return false
+        }
     }
     var parentGraphForSubgraph: NavigationGraph? {
-        if case .subgraph(_, let parent, _) = self { return parent } else { return nil }
+        if case .subgraph(_, let parent, _) = self {
+            return parent
+        } else {
+            return nil
         }
+    }
     var internalGraphForSubgraph: NavigationGraph? {
-        if case .subgraph(_, _, let internalGraph) = self { return internalGraph } else { return nil }
+        if case .subgraph(_, _, let internalGraph) = self {
+            return internalGraph
+        } else {
+            return nil
         }
+    }
 }
