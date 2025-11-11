@@ -207,7 +207,6 @@ struct DemoGraphVariant1: GraphVending {
     var graph: NavigationGraph {
 
         let signinHome = registry.resolve(SignInHomeNode.self)
-        let forgotPassword = registry.resolve(ForgotPasswordNode.self)
         let oneShotErrorNode = registry.resolve(OneShotAlertNode.self)
         let welcome = registry.resolve(WelcomeNode.self)
         let gender = registry.resolve(GenderNode.self)

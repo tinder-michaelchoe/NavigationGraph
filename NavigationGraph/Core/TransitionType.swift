@@ -46,7 +46,7 @@
 /// ```
 public enum TransitionType: Equatable, CustomStringConvertible {
 
-    case clearStackAndPush
+    case clearStackAndSet
 
     /// Dismiss a modally presented view controller.
     ///
@@ -71,11 +71,8 @@ public enum TransitionType: Equatable, CustomStringConvertible {
     /// - Requires explicit dismissal
     case modal
 
-    /// No visual transition - used for data-only navigation.
-    ///
-    /// Use this when you need to update the navigation state without changing
-    /// the visible view controller. This is useful for updating data models
-    /// or triggering side effects.
+    /// The type used when the dismissal happens as part of the system action. A good example of this
+    /// with AlertControllers where the default action will dismiss the alert automatically.
     ///
     /// ## Behavior
     /// - No animation or view controller change
@@ -136,8 +133,8 @@ public enum TransitionType: Equatable, CustomStringConvertible {
     /// and debugging navigation flows.
     public var description: String {
         switch self {
-        case .clearStackAndPush:
-            return "clearStackAndPush"
+        case .clearStackAndSet:
+            return "clearStackAndSet"
         case .dismiss:
             return "dismiss"
         case .modal:

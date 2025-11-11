@@ -16,15 +16,22 @@ import ObjectiveC
 /// or adapt custom presentation mechanisms. The handler must call the provided
 /// `onComplete` closure when the node's work is done.
 public protocol NodePresentationHandler {
-    func canHandle(node: AnyNavNode) -> Bool
-    func makeViewController(for node: AnyNavNode, input: Any, onComplete: @escaping (Any) -> Void) -> UIViewController?
+
+    func canHandle(nodeType: Any.Type) -> Bool
+    func makeViewController(
+        for node: AnyNavNode,
+        input: Any,
+        onComplete: @escaping (Any) -> Void
+    ) -> UIViewController?
 }
 
 /// Default handler for nodes that vend a `UIViewController` via `ViewControllerProviding`.
 struct DefaultUIKitNodeHandler: NodePresentationHandler {
 
-    func canHandle(node: AnyNavNode) -> Bool {
-        node.anyViewControllerProviding != nil
+    //func canHandle(node: AnyNavNode) -> Bool {
+    func canHandle(nodeType: Any.Type) -> Bool {
+        //node.anyViewControllerProviding != nil
+        return true
     }
 
     func makeViewController(
@@ -127,7 +134,7 @@ public final class NavigationController: NSObject {
     }
 
     private enum NavigationCommand {
-        case clearStackAndPush(UIViewController, meta: AssociatedNavigation)
+        case clearStackAndSet(UIViewController, meta: AssociatedNavigation)
         case dismiss
         case modal(UIViewController, meta: AssociatedNavigation)
         case pop
@@ -259,11 +266,8 @@ public final class NavigationController: NSObject {
             var nextTrail = subgraphTrail
             nextTrail.append(SubgraphFrame(node: node, parent: currentGraph, internalGraph: wrapper.graph))
             visit(node: entryWrapped, data: data, in: wrapper.graph, incoming: incoming, subgraphTrail: nextTrail)
-            return
-        }
-
-        // Headless nodes are processed immediately and do not appear on the UI stack
-        if let headless = node.anyHeadlessProcessor {
+        } else if let headless = node.anyHeadlessProcessor {
+            // Headless nodes are processed immediately and do not appear on the UI stack
             let output = headless.transformAny(data)
             if let resolved = resolveNext(from: node, output: output, startingIn: currentGraph, trail: subgraphTrail) {
                 print("""
@@ -280,36 +284,35 @@ public final class NavigationController: NSObject {
                 [NAV]: No eligible edges found for headless node \(node.fullyQualifiedId)
                 """)
             }
-            return
-        }
+        } else {
+            // UI-providing nodes → build via handler, attach metadata, execute transition
+            guard let viewController = makeViewController(
+                for: node,
+                input: data,
+                trail: subgraphTrail,
+                graph: currentGraph,
+                incoming: incoming
+            ) else {
+                fatalError("No handler could present node \(node.id)")
+            }
 
-        // UI-providing nodes → build via handler, attach metadata, execute transition
-        guard let viewController = makeViewController(
-            for: node,
-            input: data,
-            trail: subgraphTrail,
-            graph: currentGraph,
-            incoming: incoming
-        ) else {
-            fatalError("No handler could present node \(node.id)")
-        }
-
-        let meta = AssociatedNavigation(node: node, graph: currentGraph, subgraphTrail: subgraphTrail, incoming: incoming)
-        switch incoming {
-        case .clearStackAndPush:
-            execute(.clearStackAndPush(viewController, meta: meta))
-        case .dismiss:
-            execute(.dismiss)
-        case .modal:
-            execute(.modal(viewController, meta: meta))
-        case .none:
-            break
-        case .pop:
-            execute(.pop)
-        case .popTo(let index):
-            execute(.popTo(index))
-        case .push:
-            execute(.push(viewController, meta: meta))
+            let meta = AssociatedNavigation(node: node, graph: currentGraph, subgraphTrail: subgraphTrail, incoming: incoming)
+            switch incoming {
+            case .clearStackAndSet:
+                execute(.clearStackAndSet(viewController, meta: meta))
+            case .dismiss:
+                execute(.dismiss)
+            case .modal:
+                execute(.modal(viewController, meta: meta))
+            case .none:
+                break
+            case .pop:
+                execute(.pop)
+            case .popTo(let index):
+                execute(.popTo(index))
+            case .push:
+                execute(.push(viewController, meta: meta))
+            }
         }
     }
 
@@ -331,10 +334,10 @@ public final class NavigationController: NSObject {
             )
         }
         // Climb out through subgraph sentinels
-        var tmpTrail = trail
-        while let last = tmpTrail.last {
+        var tempTrail = trail
+        while let last = tempTrail.last {
             if let edge = findEligibleEdge(for: last.node, with: output, in: last.parent) {
-                let nextTrail = tmpTrail.dropLast()
+                let nextTrail = tempTrail.dropLast()
                 return NextResolution(
                     edge: edge,
                     graph: last.parent,
@@ -343,7 +346,7 @@ public final class NavigationController: NSObject {
                     source: last.node
                 )
             }
-            tmpTrail.removeLast()
+            tempTrail.removeLast()
         }
         return nil
     }
@@ -376,10 +379,10 @@ public final class NavigationController: NSObject {
     }
 
     // MARK: - Execution layer (commands)
-
+    @MainActor
     private func execute(_ command: NavigationCommand) {
         switch command {
-        case .clearStackAndPush(let viewController, let meta):
+        case .clearStackAndSet(let viewController, let meta):
             viewController.navAssociatedNavigation = meta
             navigationController.setViewControllers([viewController], animated: true)
         case .dismiss:
@@ -416,7 +419,10 @@ public final class NavigationController: NSObject {
         graph: NavigationGraph,
         incoming: TransitionType
     ) -> UIViewController? {
-        guard let handler = handlers.first(where: { $0.canHandle(node: node) }) else { return nil }
+        guard let handler = handlers.first(where: { handler in
+            let nodeType = type(of: node.wrappedNode)
+            return handler.canHandle(nodeType: nodeType)
+        }) else { return nil }
         let viewController = handler.makeViewController(for: node, input: input) { [weak self] output in
             guard let self else { return }
             if let resolved = resolveNext(from: node, output: output, startingIn: graph, trail: trail) {

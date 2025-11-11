@@ -73,21 +73,6 @@ public protocol NavNode: AnyObject {
 /// access to the internal graph structure without requiring type casting.
 public final class AnyNavNode {
 
-    /// The node's unique identifier.
-    let id: String
-    
-    /// The wrapped node instance.
-    ///
-    /// This property preserves the original node for identity comparison.
-    /// - Warning: Do not use this property directly. Use the type-safe APIs instead.
-    let wrappedNode: Any
-
-    /// Information about the subgraph if this node represents one.
-    ///
-    /// This property is `nil` for regular screen nodes and contains subgraph
-    /// details for nodes that represent nested navigation flows.
-    public let subgraphWrapper: SubgraphWrapper?
-
     /// Essential properties of a subgraph for runtime navigation.
     ///
     /// This wrapper captures the information needed to navigate within a subgraph
@@ -106,6 +91,21 @@ public final class AnyNavNode {
         /// The identifier of the start node within `graph`.
         public let exitNodeId: String
     }
+
+    /// The node's unique identifier.
+    let id: String
+    
+    /// The wrapped node instance.
+    ///
+    /// This property preserves the original node for identity comparison.
+    /// - Warning: Do not use this property directly. Use the type-safe APIs instead.
+    let wrappedNode: Any
+
+    /// Information about the subgraph if this node represents one.
+    ///
+    /// This property is `nil` for regular screen nodes and contains subgraph
+    /// details for nodes that represent nested navigation flows.
+    public let subgraphWrapper: SubgraphWrapper?
 
     /// Creates a type-erased wrapper for a navigation node.
     ///
