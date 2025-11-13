@@ -31,20 +31,21 @@ One of the framework's key strengths is its compile-time type safety:
 ### Graph Management
 
 - ``NavigationGraph`` - The main container for nodes and edges
-- ``NavSubgraph`` - Enables nested navigation flows
+- ``NavSubgraph`` - Nested navigation flows with entry and exit points
 - ``NodeRegistry`` - Dependency injection container for nodes
 
 ### Node Types
 
 - ``NavNode`` - Protocol that all navigation destinations must implement
 - ``ScreenNode`` - Concrete implementation for standard UI screens  
-- ``HeadlessNode`` - For data processing nodes without UI
+- ``HeadlessNode`` - Data processing nodes without UI presentation
 
 ### Navigation Control
 
-- ``NavigationController`` - Manages UIKit navigation and handles user interactions
+- ``NavigationController`` - Event-driven manager for UIKit navigation and user interactions
 - ``Edge`` - Defines transitions between nodes with predicates and transforms
-- ``TransitionType`` - Specifies animation types for navigation
+- ``TransitionType`` - Specifies animation types for navigation (including `.clearStackAndSet` and `.none`)
+- ``NodePresentationHandler`` - Protocol for custom node presentation logic
 
 ### View Controller Integration
 
@@ -55,10 +56,13 @@ One of the framework's key strengths is its compile-time type safety:
 
 ### Subgraph Navigation
 
-The framework supports nested navigation flows through subgraphs, enabling:
+The framework supports nested navigation flows through subgraphs with explicit entry and exit points, enabling:
 - Modular navigation components
 - Reusable flow patterns
 - Complex hierarchical navigation structures
+- Clear boundaries for nested flows
+
+Subgraphs require both an entry node (where navigation begins) and an exit node (where navigation completes). Exit nodes are typically headless nodes that complete without presenting UI.
 
 ### Conditional Navigation
 
@@ -66,6 +70,29 @@ Use predicates and multiple edges to create sophisticated branching logic:
 - User role-based routing
 - Feature flag integration
 - Dynamic flow adaptation
+
+### Headless Node Processing
+
+The framework includes headless nodes for data processing without UI presentation:
+- Data transformation between screens
+- Validation and business logic
+- Conditional routing decisions
+- Subgraph exit points
+
+### Event-Driven Navigation
+
+The NavigationController uses an event-driven architecture that:
+- Handles back button taps and swipe gestures automatically
+- Maintains internal state synchronized with UIKit
+- Supports non-blocking navigation flows
+- Enables natural user interaction patterns
+
+### Custom Presentation Handlers
+
+Extend the navigation system with pluggable presentation handlers:
+- `NodePresentationHandler` protocol for custom node rendering
+- Support for SwiftUI views, custom UIKit components, or other frameworks
+- Flexible view controller creation and configuration
 
 ### Testing Support
 
@@ -83,6 +110,8 @@ let graph = NavigationGraph()
 // Register nodes
 let welcomeNode = WelcomeNode()
 let profileNode = ProfileNode()
+let exitNode = HeadlessNode<Void, Void>()
+
 graph.addNode(welcomeNode)
 graph.addNode(profileNode)
 
@@ -94,6 +123,23 @@ graph.addEdge(Edge(
     predicate: { $0 == .viewProfile },
     transform: { _ in currentUser }
 ))
+
+// Create a subgraph with entry and exit nodes
+let subGraph = NavigationGraph()
+let subEntry = SignInNode()
+let subExit = HeadlessNode<Void, Void>()
+
+subGraph.addNode(subEntry)
+subGraph.addNode(subExit)
+subGraph.addEdge(Edge(from: subEntry, to: subExit, transition: .none))
+
+let subgraph = NavSubgraph(
+    id: "signIn",
+    graph: subGraph,
+    entry: subEntry,
+    exit: subExit
+)
+graph.addSubgraph(subgraph)
 
 // Set up navigation controller
 let navController = NavigationController(
@@ -144,7 +190,9 @@ graph.addNode(registry.resolve(ProfileNode.self))
 - **Graph Construction**: Perform during app startup for optimal performance
 - **Node Resolution**: O(1) lookup through type-based registration
 - **Path Finding**: BFS algorithm with O(V + E) complexity
-- **Memory Management**: Weak references prevent retain cycles
+- **Memory Management**: Associated objects used for view controller metadata
+- **Event-Driven Navigation**: Non-blocking callbacks enable responsive UI
+- **Stack Synchronization**: Navigation state rebuilds from UIKit as source of truth
 
 ## Thread Safety
 
@@ -157,5 +205,9 @@ The framework is designed for main-queue usage:
 
 - <doc:NavigationGraph>
 - <doc:NavNode>
+- <doc:ScreenNode>
+- <doc:HeadlessNode>
 - <doc:NavigationController>
-- <doc:Edge> 
+- <doc:Edge>
+- <doc:NavSubgraph>
+- <doc:NodePresentationHandler> 

@@ -46,6 +46,15 @@
 /// ```
 public enum TransitionType: Equatable, CustomStringConvertible {
 
+    /// Clear the entire navigation stack and set a new root view controller.
+    ///
+    /// Use this to completely reset the navigation hierarchy, such as when
+    /// logging out or starting a fresh flow.
+    ///
+    /// ## Behavior
+    /// - Removes all view controllers from the navigation stack
+    /// - Sets the new view controller as the root
+    /// - Animates the transition
     case clearStackAndSet
 
     /// Dismiss a modally presented view controller.
@@ -71,13 +80,22 @@ public enum TransitionType: Equatable, CustomStringConvertible {
     /// - Requires explicit dismissal
     case modal
 
-    /// The type used when the dismissal happens as part of the system action. A good example of this
-    /// with AlertControllers where the default action will dismiss the alert automatically.
+    /// No UI transition occurs during navigation.
+    ///
+    /// Use this when the view controller dismissal or transition is handled automatically
+    /// by the system (e.g., alert controllers) or when navigating to headless nodes that
+    /// don't present any UI.
     ///
     /// ## Behavior
     /// - No animation or view controller change
     /// - Updates internal navigation state only
-    /// - Useful for data processing nodes
+    /// - Useful for headless data processing nodes
+    /// - Appropriate for system-managed dismissals (alert controllers, etc.)
+    ///
+    /// ## Example Use Cases
+    /// - Navigating to headless nodes for data processing
+    /// - Exiting subgraphs without visual transition
+    /// - Alert controllers where the system handles dismissal
     case none
 
     /// Navigate backward by popping the current view controller.

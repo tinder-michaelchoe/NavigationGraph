@@ -53,6 +53,13 @@
 /// - Immediate completion with processed output data
 /// - Edge transforms to handle data flow to subsequent nodes
 ///
+/// ## Common Use Cases
+///
+/// - **Subgraph Exit Nodes**: Marking the completion point of a subgraph
+/// - **Data Validation**: Transforming and validating data between screens
+/// - **Conditional Routing**: Processing data to determine next navigation path
+/// - **Side Effects**: Triggering analytics, logging, or other non-UI operations
+///
 /// ## Limitations
 ///
 /// - Cannot display user interfaces

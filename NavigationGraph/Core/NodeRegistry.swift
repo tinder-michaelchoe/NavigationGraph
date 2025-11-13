@@ -112,10 +112,12 @@ public final class NodeRegistry {
     ///
     /// ## Example
     /// ```swift
+    /// let exitNode = HeadlessNode<Void, Void>()
     /// let signInSubgraph = NavSubgraph(
     ///     id: "signIn",
     ///     graph: signInGraph,
-    ///     start: signInHomeNode
+    ///     entry: signInHomeNode,
+    ///     exit: exitNode
     /// )
     /// registry.registerSubgraph(signInSubgraph)
     /// ```

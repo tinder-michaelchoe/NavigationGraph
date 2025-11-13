@@ -15,29 +15,39 @@
 ///
 /// ## Overview
 ///
-/// The subgraph's `InputType` and `OutputType` are determined by its start node.
-/// When navigation enters the subgraph, it begins at the start node. When navigation
-/// exits the subgraph (no valid edges found), the parent graph resumes control.
+/// The subgraph's `InputType` is determined by its entry node, and `OutputType` is
+/// determined by its exit node. When navigation enters the subgraph, it begins at
+/// the entry node. When navigation reaches the exit node, control returns to the
+/// parent graph.
 ///
 /// ## Example
 ///
 /// ```swift
 /// let signInFlow = NavigationGraph()
+/// let exitNode = HeadlessNode<Void, Void>()
+///
 /// signInFlow.addNode(signInHome)
 /// signInFlow.addNode(forgotPassword)
+/// signInFlow.addNode(exitNode)
+///
 /// signInFlow.addEdge(Edge(from: signInHome, to: forgotPassword, transition: .push))
+/// signInFlow.addEdge(Edge(from: forgotPassword, to: exitNode, transition: .none))
 ///
 /// let signInSubgraph = NavSubgraph(
 ///     id: "signInFlow",
 ///     graph: signInFlow,
-///     start: signInHome
+///     entry: signInHome,
+///     exit: exitNode
 /// )
 ///
 /// // Add to main graph
 /// mainGraph.addSubgraph(signInSubgraph)
 /// ```
 ///
-/// - Todo: Make the OutputType more flexible, not just tied to the start node
+/// ## Exit Nodes
+///
+/// Exit nodes are typically headless nodes that complete without presenting UI.
+/// They signal the completion of the subgraph flow and return control to the parent graph.
 public final class NavSubgraph<Entry: NavNode, Exit: NavNode>: NavNode {
 
     public typealias InputType = Entry.InputType
@@ -57,12 +67,13 @@ public final class NavSubgraph<Entry: NavNode, Exit: NavNode>: NavNode {
     /// The identifier of the exit node within the internal graph.
     public let exitNodeId: String
 
-    /// Creates a new navigation subgraph.
+    /// Creates a new navigation subgraph with explicit entry and exit nodes.
     ///
     /// - Parameters:
     ///   - id: A unique identifier for the subgraph
     ///   - graph: The internal navigation graph
-    ///   - start: The starting node within the internal graph
+    ///   - entry: The entry node where navigation begins within the subgraph
+    ///   - exit: The exit node where navigation completes within the subgraph
     public init(id: String, graph: NavigationGraph, entry: Entry, exit: Exit) {
         self.id = id
         self.graph = graph

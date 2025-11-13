@@ -19,9 +19,11 @@ A powerful, type-safe navigation framework for iOS applications that uses graph-
 - 📱 **UIKit Integration**: Seamless integration with UIKit navigation patterns
 - 🔄 **Complex Flows**: Support for conditional navigation, subgraphs, and nested flows
 - 🧪 **Testable**: Built-in testing utilities for validating navigation flows
-- ⚡ **Event-Driven**: Non-blocking navigation that supports user interaction
+- ⚡ **Event-Driven**: Non-blocking navigation that handles back gestures and user interaction naturally
 - 🎯 **Predictable**: Declarative navigation graph definitions
 - 🔍 **Debuggable**: Comprehensive logging and graph visualization tools
+- 🧩 **Extensible**: Pluggable node presentation handlers for custom UI integration
+- 🔁 **Headless Processing**: Data transformation nodes without UI presentation
 
 ## Architecture Overview
 
@@ -30,27 +32,36 @@ NavigationGraph is built around several core components:
 ### Core Components
 
 1. **NavNode**: Protocol representing a navigation destination
-2. **NavigationGraph**: Container for nodes and their connecting edges
-3. **Edge**: Defines transitions between nodes with type-safe data transformation
-4. **NavigationController**: Manages UIKit navigation based on the graph
-5. **NodeRegistry**: Dependency injection container for nodes
+2. **ScreenNode**: Concrete node implementation for UI-based screens
+3. **HeadlessNode**: Node for data processing without UI presentation
+4. **NavigationGraph**: Container for nodes and their connecting edges
+5. **Edge**: Defines transitions between nodes with type-safe data transformation
+6. **NavigationController**: Event-driven manager for UIKit navigation based on the graph
+7. **NodeRegistry**: Dependency injection container for nodes
+8. **NavSubgraph**: Nested navigation flows with entry and exit points
 
 ### Navigation Flow
 
 ```
-[Start Node] --[Edge]--> [Destination Node] --[Edge]--> [End Node]
+[Screen Node] --[Edge]--> [Headless Node] --[Edge]--> [Screen Node]
      |                         |                          |
  InputType               OutputType                 InputType
 ```
 
 Each node defines:
-- **InputType**: Data required to present the screen
-- **OutputType**: Data produced when the screen completes
+- **InputType**: Data required to present the screen or process
+- **OutputType**: Data produced when the screen completes or processing finishes
 
 Edges define:
 - **Predicate**: Condition for taking this path
 - **Transform**: Function to convert OutputType to next InputType
 - **Transition**: UIKit transition type (.push, .modal, .pop, etc.)
+
+The NavigationController uses an **event-driven architecture** that:
+- Listens for completion callbacks from view controllers
+- Handles back button taps and swipe gestures automatically
+- Maintains an internal stack that mirrors UIKit's navigation state
+- Supports non-blocking navigation allowing natural user interaction
 
 ## Requirements
 
@@ -202,7 +213,8 @@ let edge = Edge(
 - `.pop`: Pop back to previous screen
 - `.popTo(Int)`: Pop to specific index in stack
 - `.dismiss`: Dismiss modal presentation
-- `.none`: No visual transition (for data-only navigation)
+- `.clearStackAndSet`: Clear the entire navigation stack and set a new root
+- `.none`: No UI transition (used when dismissal is automatic, e.g., alert controllers)
 
 ### Node Registry
 
@@ -220,25 +232,69 @@ let welcomeNode = registry.resolve(WelcomeNode.self)
 
 ### Subgraphs
 
-Create nested navigation flows using subgraphs:
+Create nested navigation flows using subgraphs. Subgraphs require both an entry node (where navigation begins) and an exit node (where navigation completes):
 
 ```swift
 // Create a sign-in subgraph
 let signInGraph = NavigationGraph()
+let exitNode = HeadlessNode<Void, Void>() // Headless exit node
+
 signInGraph.addNode(signInHome)
 signInGraph.addNode(forgotPassword)
-signInGraph.addEdge(Edge(from: signInHome, to: forgotPassword, transition: .push))
+signInGraph.addNode(exitNode)
 
-// Wrap as a subgraph
+signInGraph.addEdge(Edge(from: signInHome, to: forgotPassword, transition: .push))
+signInGraph.addEdge(Edge(from: forgotPassword, to: exitNode, transition: .none))
+
+// Wrap as a subgraph with entry and exit nodes
 let signInSubgraph = NavSubgraph(
     id: "signInFlow",
     graph: signInGraph,
-    start: signInHome
+    entry: signInHome,
+    exit: exitNode
 )
 
 // Add to main graph
 mainGraph.addSubgraph(signInSubgraph)
 ```
+
+### Headless Nodes
+
+Process data or execute logic without presenting UI using headless nodes:
+
+```swift
+// Create a headless node for data processing
+let validationNode = HeadlessNode<UserData, ValidationResult>(
+    id: "validator",
+    transform: { userData in
+        // Perform validation logic
+        return validate(userData)
+    }
+)
+
+graph.addNode(validationNode)
+graph.addEdge(Edge(
+    from: inputNode,
+    to: validationNode,
+    transition: .none,
+    transform: { input in input }
+))
+
+// Navigate to different nodes based on validation result
+graph.addEdge(Edge(
+    from: validationNode,
+    to: successNode,
+    transition: .push,
+    predicate: { result in result.isValid }
+))
+```
+
+Headless nodes are useful for:
+- Data transformation between screens
+- Validation logic
+- API calls or async operations
+- Conditional routing decisions
+- Exit nodes for subgraphs
 
 ### Conditional Navigation
 
@@ -282,6 +338,37 @@ graph.addEdge(Edge(
 ))
 ```
 
+### Custom Node Presentation
+
+Extend the navigation system with custom presentation handlers:
+
+```swift
+struct CustomNodeHandler: NodePresentationHandler {
+    func canHandle(nodeType: Any.Type) -> Bool {
+        // Return true if this handler can present the node type
+        return nodeType is MyCustomNode.Type
+    }
+    
+    func makeViewController(
+        for node: AnyNavNode,
+        input: Any,
+        onComplete: @escaping (Any) -> Void
+    ) -> UIViewController? {
+        // Create and configure your custom view controller
+        let vc = MyCustomViewController()
+        vc.onComplete = onComplete
+        return vc
+    }
+}
+
+// Register custom handler with NavigationController
+let navController = NavigationController(
+    graph: graph,
+    navigationController: UINavigationController(),
+    handlers: [CustomNodeHandler(), DefaultUIKitNodeHandler()]
+)
+```
+
 ## Examples
 
 ### Simple Linear Flow
@@ -306,11 +393,13 @@ Main Flow -> Settings (modal) -> Advanced Settings
 
 The demo app included in this project shows a comprehensive example with:
 - Welcome screen with multiple paths
-- Sign-in subgraph with forgot password flow
+- Sign-in subgraph with forgot password flow and exit nodes
 - Gender selection with conditional branching
 - Photo selection with modal presentations
 - Map integration
-- Error handling with alerts
+- Error handling with alert controllers (using `.none` transition)
+- Nested subgraphs (photo selector within larger flows)
+- Headless nodes for flow control
 
 ## Testing
 
@@ -388,22 +477,38 @@ NavigationGraph outline from welcome:
 
 - `NavigationGraph`: Main container for nodes and edges
 - `NavNode`: Protocol for navigation destinations
+- `ScreenNode<Input, Output>`: Concrete node implementation for UI screens
+- `HeadlessNode<Input, Output>`: Node for data processing without UI
 - `Edge<From, To>`: Type-safe navigation edge
-- `NavigationController`: UIKit navigation manager
+- `NavigationController`: Event-driven UIKit navigation manager
 - `NodeRegistry`: Dependency injection container
+- `NavSubgraph<Entry, Exit>`: Nested navigation flow with entry and exit nodes
 
 ### Protocols
 
 - `NavigableViewController`: UIViewController extension for navigation
 - `ViewControllerProviding`: Factory protocol for creating view controllers
 - `NavSubgraphProtocol`: Protocol for nested navigation graphs
+- `NodePresentationHandler`: Protocol for custom node presentation logic
 
 ### Key Methods
 
 - `NavigationGraph.addNode(_:)`: Register a node
+- `NavigationGraph.addSubgraph(_:)`: Register a subgraph as a node
 - `NavigationGraph.addEdge(_:)`: Define navigation edge
 - `NavigationController.start(at:with:)`: Begin navigation
 - `NodeRegistry.register(_:)`: Register node for DI
+- `NodeRegistry.registerSubgraph(_:)`: Register subgraph for DI
+
+### Transition Types
+
+- `TransitionType.push`: Standard push navigation
+- `TransitionType.modal`: Modal presentation
+- `TransitionType.pop`: Pop current screen
+- `TransitionType.popTo(Int)`: Pop to specific stack index
+- `TransitionType.dismiss`: Dismiss modal
+- `TransitionType.clearStackAndSet`: Clear stack and set new root
+- `TransitionType.none`: No UI transition (automatic dismissal)
 
 ## Future Enhancements
 

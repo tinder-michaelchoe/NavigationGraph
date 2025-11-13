@@ -113,25 +113,28 @@ public final class NavigationGraph {
 
     /// Adds a subgraph as a node in this graph.
     ///
-    /// The subgraph appears as a single node whose `InputType` and `OutputType`
-    /// match those of its start node. Once added, you can connect edges to and from
-    /// the subgraph like any other node.
+    /// The subgraph appears as a single node whose `InputType` matches its entry node
+    /// and `OutputType` matches its exit node. Once added, you can connect edges to
+    /// and from the subgraph like any other node.
     ///
     /// - Parameter subgraph: The subgraph to add
     /// - Returns: The graph instance for method chaining
     ///
     /// ## Navigation Within Subgraphs
     ///
-    /// To navigate within the subgraph, call `findPath` on the subgraph's
-    /// internal `NavigationGraph`.
+    /// Navigation automatically enters the subgraph at its entry node and exits
+    /// when the exit node is reached. The NavigationController handles this
+    /// transition seamlessly.
     ///
     /// ## Example
     ///
     /// ```swift
+    /// let exitNode = HeadlessNode<Void, Void>()
     /// let signInSubgraph = NavSubgraph(
     ///     id: "signIn",
     ///     graph: signInGraph,
-    ///     start: signInHomeNode
+    ///     entry: signInHomeNode,
+    ///     exit: exitNode
     /// )
     /// graph.addSubgraph(signInSubgraph)
     /// ```
